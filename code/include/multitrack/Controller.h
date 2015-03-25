@@ -16,8 +16,8 @@ namespace itp { namespace multitrack {
 	private:
 		
 		Timer::Ref		mTimer;
-		Track::Ref		mCursor; // TODO: mRecordingDevices?
 		TrackGroup::Ref	mSequence;
+		Track::RefDeque	mRecordingDevices;
 		
 		/** @brief default constructor */
 		Controller() :
@@ -58,24 +58,30 @@ namespace itp { namespace multitrack {
 
 		void cancelRecorder()
 		{
-			if( mCursor ) {
-				mCursor->stop();
-				mSequence->removeTrack( mCursor );
-				mCursor.reset();
+			for (auto& tDevice : mRecordingDevices) {
+				if (tDevice) {
+					tDevice->stop();
+					mSequence->removeTrack(tDevice);
+					tDevice.reset();
+				}
 			}
+			mRecordingDevices.clear();
 		}
 		
 		void completeRecorder()
 		{
-			if( mCursor ) {
-				mCursor->gotoPlayMode();
-				mCursor.reset();
+			for (auto& tDevice : mRecordingDevices) {
+				if (tDevice) {
+					tDevice->gotoPlayMode();
+					tDevice.reset();
+				}
 			}
+			mRecordingDevices.clear();
 		}
 		
 		template <typename T> void addRecorder(std::function<T(void)> iRecorderCallbackFn, std::function<void(const T&)> iPlayerCallbackFn)
 		{
-			mCursor = mSequence->addTrackRecorder<T>(iRecorderCallbackFn, iPlayerCallbackFn);
+			mRecordingDevices.push_back(mSequence->addTrackRecorder<T>(iRecorderCallbackFn, iPlayerCallbackFn));
 		}
 	};
 	

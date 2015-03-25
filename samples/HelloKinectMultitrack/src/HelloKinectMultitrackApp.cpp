@@ -25,7 +25,7 @@ class HelloKinectMultitrackApp : public App {
 	void mouseDown(MouseEvent event) override;
 	void keyUp(KeyEvent event) override;
 
-	void renderSilhouette(bool iDrawSkeletons = false);
+	void renderSilhouette();
 
 	long long							mTimeStamp;
 	long long							mTimeStampPrev;
@@ -49,9 +49,6 @@ class HelloKinectMultitrackApp : public App {
 
 	ci::gl::FboRef						mSilhouetteFbo;
 
-	itp::multitrack::Timer::Ref			mMultitrackTimer;
-	itp::multitrack::Track::Ref			mMultitrackCursor;
-	itp::multitrack::TrackGroup::Ref	mMultitrackSequence;
 	itp::multitrack::Controller::Ref	mMultitrackController;
 };
 
@@ -163,19 +160,51 @@ void HelloKinectMultitrackApp::keyUp(KeyEvent event)
 		break;
 	}
 	case 'a': {
-		// Create recorder callback lambda:
-		auto tRecorderCallbackFn = [&](void) -> ci::SurfaceRef
+		// Create image recorder callback lambda:
+		auto tImgRecorderCallbackFn = [&](void) -> ci::SurfaceRef
 		{
-			renderSilhouette(false);
+			renderSilhouette();
 			return std::make_shared<Surface8u>(mSilhouetteFbo->readPixels8u(mSilhouetteFbo->getBounds()));
 		};
-		// Create player callback lambda:
-		auto tPlayerCallbackFn = [&](const ci::SurfaceRef& iSurface) -> void
+		// Create image player callback lambda:
+		auto tImgPlayerCallbackFn = [&](const ci::SurfaceRef& iSurface) -> void
 		{
+			if (iSurface.get() == NULL) return;
+			gl::enable(GL_TEXTURE_2D);
 			ci::gl::draw(ci::gl::Texture::create(*(iSurface.get())), ci::app::getWindowBounds());
 		};
-		// Create recorder track:
-		mMultitrackController->addRecorder<ci::SurfaceRef>(tRecorderCallbackFn, tPlayerCallbackFn);
+		// Create image recorder track:
+		mMultitrackController->addRecorder<ci::SurfaceRef>(tImgRecorderCallbackFn, tImgPlayerCallbackFn);
+		// Create body recorder callback lambda:
+		auto tBodyRecorderCallbackFn = [&](void) -> std::shared_ptr<Kinect2::BodyFrame>
+		{
+			return std::make_shared<Kinect2::BodyFrame>(mBodyFrame);
+		};
+		// Create body player callback lambda:
+		auto tBodyPlayerCallbackFn = [&](const std::shared_ptr<Kinect2::BodyFrame>& iFrame) -> void
+		{
+			if (iFrame.get() == NULL) return;
+			gl::ScopedMatrices scopeMatrices;
+			gl::scale(vec2(getWindowSize()) / vec2(mChannelBody->getSize()));
+			gl::disable(GL_TEXTURE_2D);
+			for (const Kinect2::Body& body : iFrame->getBodies()) {
+				if (body.isTracked()) {
+					gl::color(ColorAf::white());
+					for (const auto& joint : body.getJointMap()) {
+						if (joint.second.getTrackingState() == TrackingState::TrackingState_Tracked) {
+							vec2 pos(mDevice->mapCameraToDepth(joint.second.getPosition()));
+							gl::drawSolidCircle(pos, 5.0f, 32);
+							vec2 parent(mDevice->mapCameraToDepth(
+								body.getJointMap().at(joint.second.getParentJoint()).getPosition()
+								));
+							gl::drawLine(pos, parent);
+						}
+					}
+				}
+			}
+		};
+		// Create body recorder track:
+		mMultitrackController->addRecorder< std::shared_ptr<Kinect2::BodyFrame> >(tBodyRecorderCallbackFn, tBodyPlayerCallbackFn);
 		//
 		break;
 	}
@@ -187,7 +216,7 @@ void HelloKinectMultitrackApp::keyUp(KeyEvent event)
 	}
 }
 
-void HelloKinectMultitrackApp::renderSilhouette(bool iDrawSkeletons)
+void HelloKinectMultitrackApp::renderSilhouette()
 {
 	gl::ScopedFramebuffer fbScp(mSilhouetteFbo);
 	gl::clear( ColorA( 0, 0, 0, 0 ) ); 
@@ -251,27 +280,6 @@ void HelloKinectMultitrackApp::renderSilhouette(bool iDrawSkeletons)
 		mTextureColor->unbind();
 		mTextureDepth->unbind();
 		mTextureLookup->unbind();
-		// Draw skeletons:
-		if (iDrawSkeletons) {
-			gl::ScopedMatrices scopeMatrices;
-			gl::scale(vec2(mSilhouetteFbo->getSize()) / vec2(mChannelBody->getSize()));
-			gl::disable(GL_TEXTURE_2D);
-			for (const Kinect2::Body& body : mBodyFrame.getBodies()) {
-				if (body.isTracked()) {
-					gl::color(ColorAf::white());
-					for (const auto& joint : body.getJointMap()) {
-						if (joint.second.getTrackingState() == TrackingState::TrackingState_Tracked) {
-							vec2 pos(mDevice->mapCameraToDepth(joint.second.getPosition()));
-							gl::drawSolidCircle(pos, 5.0f, 32);
-							vec2 parent(mDevice->mapCameraToDepth(
-								body.getJointMap().at(joint.second.getParentJoint()).getPosition()
-								));
-							gl::drawLine(pos, parent);
-						}
-					}
-				}
-			}
-		}
 	}
 }
 
