@@ -17,14 +17,14 @@ class ATestApp : public App {
 	void update() override;
 	void draw() override;
 
-	std::size_t					mBodyCount;
-
 	long long					mTimeStamp;
 	long long					mTimeStampPrev;
 
 	ci::gl::GlslProgRef			mGlslProg;
 
 	Kinect2::DeviceRef			mDevice;
+
+	Kinect2::BodyFrame			mBodyFrame;
 
 	ci::Channel8uRef			mChannelBody;
 	ci::Surface8uRef			mSurfaceColor;
@@ -66,16 +66,7 @@ void ATestApp::setup()
 	mDevice->start();
 	mDevice->connectBodyEventHandler([&](const Kinect2::BodyFrame& frame)
 	{
-		// Get active bodies:
-		const std::vector<Kinect2::Body>& tBodies = frame.getBodies();
-		std::vector<const Kinect2::Body*> tActiveBodies;
-		for (std::vector<Kinect2::Body>::const_iterator it = tBodies.cbegin(); it != tBodies.cend(); it++) {
-			if ((*it).calcConfidence() > 0.5) {
-				tActiveBodies.push_back(&(*it));
-			}
-		}
-		// Get active count:
-		mBodyCount = tActiveBodies.size();
+		mBodyFrame = frame;
 	});
 	mDevice->connectBodyIndexEventHandler([&](const Kinect2::BodyIndexFrame& frame)
 	{
@@ -127,9 +118,9 @@ void ATestApp::draw()
 {
 	gl::clear( Color( 0, 0, 0 ) ); 
 	gl::enableAlphaBlending();
-
 	// Check for necessary inputs:
 	if (mSurfaceColor && mChannelDepth && mSurfaceLookup && mChannelBody) {
+		gl::enable(GL_TEXTURE_2D);
 		// Generate color texture:
 		if (mTextureColor) {
 			mTextureColor->update(*(mSurfaceColor.get()));
@@ -160,11 +151,9 @@ void ATestApp::draw()
 		// Generate body-index texture:
 		if (mTextureBody) {
 			mTextureBody->update(*(mChannelBody.get()));
-			//mTextureBody->update(Kinect2::colorizeBodyIndex(mChannelBody));
 		}
 		else {
 			mTextureBody = ci::gl::Texture::create(*(mChannelBody.get()));
-			//mTextureBody = ci::gl::Texture::create(Kinect2::colorizeBodyIndex(mChannelBody));
 		}
 		// Bind body-index texture:
 		mTextureBody->bind(3);
@@ -180,14 +169,38 @@ void ATestApp::draw()
 			mGlslProg->uniform("uSilhouette", false);
 			// Set color:
 			ci::gl::color(1.0, 1.0, 1.0, 1.0);
-			// Draw rect (TODO aspect ratio, etc):
+			// Draw rect:
 			ci::gl::drawSolidRect(ci::app::getWindowBounds());
 		}
 		// Unbind textures:
 		mTextureColor->unbind();
 		mTextureDepth->unbind();
 		mTextureLookup->unbind();
+		// Draw skeletons:
+		gl::pushMatrices();
+		gl::scale(vec2(getWindowSize()) / vec2(mChannelBody->getSize()));
+		gl::disable(GL_TEXTURE_2D);
+		for (const Kinect2::Body& body : mBodyFrame.getBodies()) {
+			if (body.isTracked()) {
+				gl::color(ColorAf::white());
+				for (const auto& joint : body.getJointMap()) {
+					if (joint.second.getTrackingState() == TrackingState::TrackingState_Tracked) {
+						vec2 pos(mDevice->mapCameraToDepth(joint.second.getPosition()));
+						//gl::drawSolidCircle(pos, 5.0f, 32);
+						vec2 parent(mDevice->mapCameraToDepth(
+							body.getJointMap().at(joint.second.getParentJoint()).getPosition()
+							));
+						gl::drawLine(pos, parent);
+					}
+				}
+			}
+		}
+		gl::popMatrices();
 	}
 }
 
-CINDER_APP( ATestApp, RendererGl )
+CINDER_APP(ATestApp, RendererGl, [](App::Settings* settings)
+{
+	settings->prepareWindow(Window::Format().size(1024, 768).title("ITP Kinect Recording Tools"));
+	settings->setFrameRate(60.0f);
+} )
