@@ -1,13 +1,13 @@
 #pragma once
 
-#include "Track.h"
+#include <multitrack/Track.h>
 
-namespace sequence {
+namespace itp { namespace multitrack {
 
 	class TrackGroup : public Track {
 	public:
 		
-		typedef std::shared_ptr<TrackGroup>		Ref;
+		typedef std::shared_ptr<TrackGroup>			Ref;
 		typedef std::shared_ptr<const TrackGroup>	ConstRef;
 		
 	private:
@@ -66,17 +66,17 @@ namespace sequence {
 			mTracks.push_back( iTrack );
 		}
 		
-		template <typename T> Track::Ref addTrackRecorder(std::function<T(void)> iCallbackFn)
+		template <typename T> Track::Ref addTrackRecorder(std::function<T(void)> iRecorderCallbackFn, std::function<void(const T&)> iPlayerCallbackFn)
 		{
 			// Create typed track:
 			typename TrackT<T>::Ref tTrack = TrackT<T>::create( getRef<TrackGroup>() );
 			// Add track to controller:
 			addTrack( tTrack );
 			// Start recorder:
-			tTrack->gotoRecordMode( iCallbackFn );
+			tTrack->gotoRecordMode(iRecorderCallbackFn, iPlayerCallbackFn);
 			// Return track:
 			return tTrack;
 		}
 	};
 
-} // namespace sequence
+} } // namespace itp::multitrack

@@ -2,12 +2,15 @@
 
 #include "TrackGroup.h"
 
-namespace sequence {
+#include <multitrack/Track.h>
+#include <multitrack/TypeTrack.h>
+
+namespace itp { namespace multitrack {
 	
 	class Controller : public TrackBase {
 	public:
 		
-		typedef std::shared_ptr<Controller>		Ref;
+		typedef std::shared_ptr<Controller>			Ref;
 		typedef std::shared_ptr<const Controller>	ConstRef;
 		
 	private:
@@ -70,10 +73,10 @@ namespace sequence {
 			}
 		}
 		
-		template <typename T> void addRecorder(std::function<T(void)> iCallbackFn)
+		template <typename T> void addRecorder(std::function<T(void)> iRecorderCallbackFn, std::function<void(const T&)> iPlayerCallbackFn)
 		{
-			mCursor = mSequence->addTrackRecorder<T>( iCallbackFn );
+			mCursor = mSequence->addTrackRecorder<T>(iRecorderCallbackFn, iPlayerCallbackFn);
 		}
 	};
 	
-} // namespace sequence
+} } // namespace itp::multitrack

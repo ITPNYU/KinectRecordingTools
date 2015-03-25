@@ -1,8 +1,8 @@
 #pragma once
 
-#include "Timer.h"
+#include <multitrack/Timer.h>
 
-namespace sequence {
+namespace itp { namespace multitrack {
 	
 	/** @brief abstract base class for track and track-mediator types */
 	class TrackBase : public std::enable_shared_from_this<TrackBase> {
@@ -149,4 +149,4 @@ namespace sequence {
 		}
 	};
 
-} // namespace sequence
+} } // namespace itp::multitrack

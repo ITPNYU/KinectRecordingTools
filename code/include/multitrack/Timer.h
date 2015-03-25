@@ -7,7 +7,7 @@
 
 #include "cinder/gl/gl.h"
 
-namespace sequence {
+namespace itp { namespace multitrack {
 	
 	class Timer {
 	public:
@@ -63,4 +63,4 @@ namespace sequence {
 		}
 	};
 	
-} // namespace sequence
+} } // namespace itp::multitrack

@@ -1,8 +1,8 @@
 #pragma once
 
-#include "Track.h"
+#include <multitrack/Track.h>
 
-namespace sequence {
+namespace itp { namespace multitrack {
 
 	/** @brief templated track type */
 	template <typename T> class TrackT : public Track {
@@ -17,8 +17,9 @@ namespace sequence {
 		typedef typename FrameVec::iterator			Iter;
 		typedef typename FrameVec::const_iterator	ConstIter;
 		
-		typedef std::function<T(void)>				Callback;
-		
+		typedef std::function<T(void)>				RecorderCallback;
+		typedef std::function<void(const T&)>		PlayerCallback;
+
 		/** @brief track player */
 		class Player : public TrackBase {
 		public:
@@ -28,16 +29,19 @@ namespace sequence {
 		private:
 
 			typename TrackT::Ref	mTrack;
+			PlayerCallback			mPlayerCallback;
 			Iter					mIterator;
 			double					mKeyTimeCurr;
 			double					mKeyTimeNext;
 
-			Player(typename TrackT::Ref iTrack) :
+			Player(typename TrackT::Ref iTrack, PlayerCallback iPlayerCallback) :
 				mTrack(iTrack),
+				mPlayerCallback(iPlayerCallback),
 				mIterator(mTrack->end()),
 				mKeyTimeCurr(0.0),
 				mKeyTimeNext(0.0)
-			{ /* no-op */
+			{ 
+				/* no-op */
 			}
 
 		public:
@@ -79,8 +83,8 @@ namespace sequence {
 
 			void draw()
 			{
-				if (mIterator == mTrack->end()) return;
-				ci::gl::draw((*mIterator).second);
+				if (!mPlayerCallback || mIterator == mTrack->end()) return;
+				mPlayerCallback((*mIterator).second);
 			}
 		};
 
@@ -93,16 +97,19 @@ namespace sequence {
 		private:
 
 			typename TrackT::Ref	mTrack;
-			Callback				mCallback;
+			RecorderCallback		mRecorderCallback;
+			PlayerCallback			mPlayerCallback;
 			double					mStart;  //!< local start time (in seconds)
 			bool					mActive;
 
-			Recorder(typename TrackT::Ref iTrack, Callback iCallback) :
+			Recorder(typename TrackT::Ref iTrack, RecorderCallback iRecorderCallback, PlayerCallback iPlayerCallback) :
 				mTrack(iTrack),
-				mCallback(iCallback),
+				mRecorderCallback(iRecorderCallback),
+				mPlayerCallback(iPlayerCallback),
 				mStart(0.0),
 				mActive(false)
-			{ /* no-op */
+			{ 
+				/* no-op */
 			}
 
 		public:
@@ -113,16 +120,26 @@ namespace sequence {
 				return Recorder::Ref(new Recorder(std::forward<Args>(args)...));
 			}
 
+			RecorderCallback getRecorderCallbackFn() const
+			{
+				return mRecorderCallback;
+			}
+
+			PlayerCallback getPlayerCallbackFn() const
+			{
+				return mPlayerCallback;
+			}
+
 			void update()
 			{
-				if (!mActive || !mCallback) return;
-				mTrack->push_back(ci::app::getElapsedSeconds() - mStart, mCallback());
+				if (!mActive || !mRecorderCallback) return;
+				mTrack->push_back(ci::app::getElapsedSeconds() - mStart, mRecorderCallback());
 			}
 
 			void draw()
 			{
-				if (!mActive || mTrack->empty()) return;
-				ci::gl::draw(mTrack->back().second);
+				if (!mActive || !mPlayerCallback || mTrack->empty()) return;
+				mPlayerCallback(mTrack->back().second);
 			}
 
 			void start()
@@ -190,17 +207,22 @@ namespace sequence {
 		
 		void gotoPlayMode()
 		{
-			if( mMediator ) mMediator->stop();
-			mMediator = Player::create( getRef<TrackT>() );
+			// Stop mediator:
+			if (mMediator) mMediator->stop();
+			// Cast mediator to recorder:
+			Recorder::Ref tRecorderCast = std::dynamic_pointer_cast<Recorder>(mMediator);
+			// Return on cast error:
+			if (!tRecorderCast) { return; }
+			mMediator = Player::create(getRef<TrackT>(), tRecorderCast->getPlayerCallbackFn());
 			mMediator->start();
 		}
 		
-		void gotoRecordMode(Callback iCallback)
+		void gotoRecordMode(RecorderCallback iRecorderCallback, PlayerCallback iPlayerCallback)
 		{
 			if( mMediator ) mMediator->stop();
-			mMediator = Recorder::create( getRef<TrackT>(), iCallback );
+			mMediator = Recorder::create(getRef<TrackT>(), iRecorderCallback, iPlayerCallback);
 			mMediator->start();
 		}
 	};
 
-} // namespace sequence
+} } // namespace itp::multitrack
