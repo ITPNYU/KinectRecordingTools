@@ -5,12 +5,13 @@
 #include <iostream>
 #include <string>
 
+#include "cinder/gl/GlslProg.h"
+
 #define STRINGIFY(x) #x
 
 namespace itp {
 	
-	// TODO: version 150
-	static const std::string kGlslKinectDepthVert =
+	static const std::string kGlslDefaultVert =
 	STRINGIFY(
 			  uniform mat4	ciModelViewProjection;
 			  
@@ -25,8 +26,7 @@ namespace itp {
 			  }
 	);
 	
-	// TODO: version 150
-	static const std::string kGlslKinectDepthFrag =
+	static const std::string kGlslKinectAlignSilhouetteFrag =
 	STRINGIFY(
 			  // CONFIG:
 			  
@@ -79,5 +79,14 @@ namespace itp {
 				  //fragColor = texture( uTextureBody, vTexCoord0 );
 			  }
 	);
+	
+	static inline ci::gl::GlslProgRef createKinectAlignSilhouetteShader()
+	{
+		ci::gl::GlslProg::Format tFormat;
+		tFormat.version( 150 );
+		tFormat.vertex( kGlslDefaultVert );
+		tFormat.fragment( kGlslKinectAlignSilhouetteFrag );
+		return gl::GlslProg::create( tFormat );
+	}
 
 } // namespace itp
