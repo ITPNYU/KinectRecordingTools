@@ -30,13 +30,11 @@ namespace itp {
 	STRINGIFY(
 			  // CONFIG:
 			  
-			  uniform bool		uGrayscale;
 			  uniform bool		uSilhouette;
 			  
 			  // USER TEXTURES:
 			  
 			  uniform sampler2D	uTextureColor;
-			  uniform sampler2D	uTextureDepth;
 			  uniform sampler2D	uTextureLookup;
 			  uniform sampler2D	uTextureBody;
 			  
@@ -44,13 +42,6 @@ namespace itp {
 			  
 			  in  vec2			vTexCoord0;
 			  out vec4 			fragColor;
-			  
-			  // HELPERS:
-			  
-			  vec4 color_to_grayscale(vec4 val)
-			  {
-				  return vec4( vec3( dot( val.rgb, vec3( 0.299, 0.587, 0.114 ) ) ), val.a );
-			  }
 			  
 			  // MAIN:
 			  
@@ -65,14 +56,8 @@ namespace itp {
 				  else {
 					  // Get depth-to-color lookup coordinate:
 					  vec2 tCoordAdj = texture( uTextureLookup, vTexCoord0 ).rg;
-					  // Get masked-user color pixel:
-					  vec4 tUserColor = vec4( texture( uTextureColor, tCoordAdj ).rgb, tBodyMask );
-					  // Set to grayscale, if desired:
-					  if( uGrayscale ) {
-						  tUserColor = color_to_grayscale( tUserColor );
-					  }
-					  // Set final color:
-					  fragColor = tUserColor;
+					  // Set final color from  masked-user color pixel:
+					  fragColor = vec4(texture(uTextureColor, tCoordAdj).rgb, tBodyMask);
 				  }
 		
 				  // For debug only:
@@ -86,7 +71,7 @@ namespace itp {
 		tFormat.version( 150 );
 		tFormat.vertex( kGlslDefaultVert );
 		tFormat.fragment( kGlslKinectAlignSilhouetteFrag );
-		return gl::GlslProg::create( tFormat );
+		return ci::gl::GlslProg::create( tFormat );
 	}
 
 } // namespace itp
