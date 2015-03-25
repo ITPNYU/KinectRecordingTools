@@ -13,29 +13,32 @@
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav</Extensions>
     </Filter>
     <Filter Include="Blocks">
-      <UniqueIdentifier>{B051455E-1630-4FE7-B939-A9D4CB8760B7}</UniqueIdentifier>
+      <UniqueIdentifier>{E0EBEAD8-B5C1-4A28-BB8E-AA0CAD32EDAD}</UniqueIdentifier>
     </Filter>
     <Filter Include="Blocks\Cinder-KCB2">
-      <UniqueIdentifier>{F850C79E-F469-4D77-AC1F-175D3950FD6B}</UniqueIdentifier>
+      <UniqueIdentifier>{23567AE6-A4D3-4D79-AE71-A56B8FF5E6E0}</UniqueIdentifier>
     </Filter>
     <Filter Include="Blocks\Cinder-KCB2\src">
-      <UniqueIdentifier>{FE234289-48E4-451E-B4A5-FAA88360B8DD}</UniqueIdentifier>
+      <UniqueIdentifier>{77AA3493-ED8B-4FFF-95D5-CC13C4191C0B}</UniqueIdentifier>
     </Filter>
     <Filter Include="Blocks\KinectRecordingTools">
-      <UniqueIdentifier>{DE7EFF1A-9DF1-43AB-8FE4-68C98343010A}</UniqueIdentifier>
+      <UniqueIdentifier>{2445DA32-9C7C-49BC-B069-1950B023DB99}</UniqueIdentifier>
     </Filter>
     <Filter Include="Blocks\KinectRecordingTools\code">
-      <UniqueIdentifier>{EC2905F0-8C72-4C38-BB66-79BD152BF67B}</UniqueIdentifier>
+      <UniqueIdentifier>{04AB63E2-738F-4473-A8D7-076297D89B2F}</UniqueIdentifier>
     </Filter>
     <Filter Include="Blocks\KinectRecordingTools\code\include">
-      <UniqueIdentifier>{6A73FB66-B156-453C-A0A7-AACA359E9C76}</UniqueIdentifier>
+      <UniqueIdentifier>{FDD9E62D-0109-45BE-948C-557DBBA4B8AA}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Blocks\KinectRecordingTools\code\include\multitrack">
+      <UniqueIdentifier>{DEA96333-4034-4842-A476-4C8D50B47B95}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\src\ATestApp.cpp">
+    <ClCompile Include="..\src\HelloKinectApp.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\ATestApp.cpp">
+    <ClCompile Include="..\src\HelloKinectApp.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClInclude Include="..\include\Resources.h">
@@ -49,6 +52,21 @@
     </ClInclude>
     <ClInclude Include="..\..\..\code\include\KinectProcessingGlsl.h">
       <Filter>Blocks\KinectRecordingTools\code\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\code\include\multitrack\Controller.h">
+      <Filter>Blocks\KinectRecordingTools\code\include\multitrack</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\code\include\multitrack\Timer.h">
+      <Filter>Blocks\KinectRecordingTools\code\include\multitrack</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\code\include\multitrack\Track.h">
+      <Filter>Blocks\KinectRecordingTools\code\include\multitrack</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\code\include\multitrack\TrackGroup.h">
+      <Filter>Blocks\KinectRecordingTools\code\include\multitrack</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\code\include\multitrack\TypeTrack.h">
+      <Filter>Blocks\KinectRecordingTools\code\include\multitrack</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -8,6 +8,7 @@
 	library="http://itp.nyu.edu"
 	>
 	<headerPattern>code/include/*.h</headerPattern>
+  <headerPattern>code/include/multitrack/*.h</headerPattern>
 	<includePath system="true">code/include</includePath>
 </block>
 </cinder>

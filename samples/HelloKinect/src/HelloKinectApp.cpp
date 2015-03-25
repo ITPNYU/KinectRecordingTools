@@ -1,21 +1,27 @@
 #include "cinder/app/App.h"
 #include "cinder/app/RendererGl.h"
 #include "cinder/gl/gl.h"
+#include "cinder/gl/Fbo.h"
 
 #include "Kinect2.h"
 
 #include <KinectProcessingGlsl.h>
 
+#define RAW_FRAME_WIDTH  1920
+#define RAW_FRAME_HEIGHT 1080
+
 using namespace ci;
 using namespace ci::app;
 using namespace std;
 
-class ATestApp : public App {
+class HelloKinectApp : public App {
   public:
 	void setup() override;
 	void mouseDown( MouseEvent event ) override;
 	void update() override;
 	void draw() override;
+
+	void renderSilhouette(bool iDrawSkeletons = false);
 
 	long long					mTimeStamp;
 	long long					mTimeStampPrev;
@@ -36,9 +42,11 @@ class ATestApp : public App {
 	ci::gl::TextureRef			mTextureColor;
 	ci::gl::TextureRef			mTextureDepth;
 	ci::gl::TextureRef			mTextureLookup;
+
+	ci::gl::FboRef				mSilhouetteFbo;
 };
 
-void ATestApp::setup()
+void HelloKinectApp::setup()
 {
 	// Enable texture mode:
 	ci::gl::enable(GL_TEXTURE_2D);
@@ -81,13 +89,16 @@ void ATestApp::setup()
 		mChannelDepth = frame.getChannel();
 		mTimeStamp = frame.getTimeStamp();
 	});
+	// Setup FBO:
+	ci::gl::Fbo::Format tSilhouetteFboFormat;
+	mSilhouetteFbo = ci::gl::Fbo::create(RAW_FRAME_WIDTH, RAW_FRAME_HEIGHT, tSilhouetteFboFormat.colorTexture());
 }
 
-void ATestApp::mouseDown( MouseEvent event )
+void HelloKinectApp::mouseDown( MouseEvent event )
 {
 }
 
-void ATestApp::update()
+void HelloKinectApp::update()
 {
 	// Check whether depth-to-color mapping update is needed:
 	if ((mTimeStamp != mTimeStampPrev) && mSurfaceColor && mChannelDepth) {
@@ -114,10 +125,23 @@ void ATestApp::update()
 	}
 }
 
-void ATestApp::draw()
+void HelloKinectApp::draw()
 {
-	gl::clear( Color( 0, 0, 0 ) ); 
+	renderSilhouette(true);
+
+	gl::clear(Color(0, 0, 0));
 	gl::enableAlphaBlending();
+	gl::setMatricesWindow(getWindowSize());
+	gl::enable(GL_TEXTURE_2D);
+	gl::draw(mSilhouetteFbo->getColorTexture(),getWindowBounds());
+}
+
+void HelloKinectApp::renderSilhouette(bool iDrawSkeletons)
+{
+	gl::ScopedFramebuffer fbScp(mSilhouetteFbo);
+	gl::clear( ColorA( 0, 0, 0, 0 ) ); 
+	gl::ScopedViewport scpVp(ivec2(0), mSilhouetteFbo->getSize());
+	gl::setMatricesWindow(mSilhouetteFbo->getSize());
 	// Check for necessary inputs:
 	if (mSurfaceColor && mChannelDepth && mSurfaceLookup && mChannelBody) {
 		gl::enable(GL_TEXTURE_2D);
@@ -170,36 +194,37 @@ void ATestApp::draw()
 			// Set color:
 			ci::gl::color(1.0, 1.0, 1.0, 1.0);
 			// Draw rect:
-			ci::gl::drawSolidRect(ci::app::getWindowBounds());
+			ci::gl::drawSolidRect(mSilhouetteFbo->getBounds());
 		}
 		// Unbind textures:
 		mTextureColor->unbind();
 		mTextureDepth->unbind();
 		mTextureLookup->unbind();
 		// Draw skeletons:
-		gl::pushMatrices();
-		gl::scale(vec2(getWindowSize()) / vec2(mChannelBody->getSize()));
-		gl::disable(GL_TEXTURE_2D);
-		for (const Kinect2::Body& body : mBodyFrame.getBodies()) {
-			if (body.isTracked()) {
-				gl::color(ColorAf::white());
-				for (const auto& joint : body.getJointMap()) {
-					if (joint.second.getTrackingState() == TrackingState::TrackingState_Tracked) {
-						vec2 pos(mDevice->mapCameraToDepth(joint.second.getPosition()));
-						//gl::drawSolidCircle(pos, 5.0f, 32);
-						vec2 parent(mDevice->mapCameraToDepth(
-							body.getJointMap().at(joint.second.getParentJoint()).getPosition()
-							));
-						gl::drawLine(pos, parent);
+		if (iDrawSkeletons) {
+			gl::ScopedMatrices scopeMatrices;
+			gl::scale(vec2(mSilhouetteFbo->getSize()) / vec2(mChannelBody->getSize()));
+			gl::disable(GL_TEXTURE_2D);
+			for (const Kinect2::Body& body : mBodyFrame.getBodies()) {
+				if (body.isTracked()) {
+					gl::color(ColorAf::white());
+					for (const auto& joint : body.getJointMap()) {
+						if (joint.second.getTrackingState() == TrackingState::TrackingState_Tracked) {
+							vec2 pos(mDevice->mapCameraToDepth(joint.second.getPosition()));
+							gl::drawSolidCircle(pos, 5.0f, 32);
+							vec2 parent(mDevice->mapCameraToDepth(
+								body.getJointMap().at(joint.second.getParentJoint()).getPosition()
+								));
+							gl::drawLine(pos, parent);
+						}
 					}
 				}
 			}
 		}
-		gl::popMatrices();
 	}
 }
 
-CINDER_APP(ATestApp, RendererGl, [](App::Settings* settings)
+CINDER_APP(HelloKinectApp, RendererGl, [](App::Settings* settings)
 {
 	settings->prepareWindow(Window::Format().size(1024, 768).title("ITP Kinect Recording Tools"));
 	settings->setFrameRate(60.0f);

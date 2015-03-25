@@ -26,8 +26,8 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{00FBCD8D-090B-4216-B90E-00A16017881F}</ProjectGuid>
-    <RootNamespace>ATest</RootNamespace>
+    <ProjectGuid>{B3B41FE3-0D6B-4258-BAEC-793644754443}</ProjectGuid>
+    <RootNamespace>HelloKinect</RootNamespace>
     <Keyword>Win32Proj</Keyword>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -279,13 +279,18 @@ xcopy /y "..\..\..\..\..\\lib\msw\x86\d3dcompiler_46.dll" "$(OutDir)"</Command>
   <ItemGroup />
   <ItemGroup />
   <ItemGroup>
-    <ClCompile Include="..\src\ATestApp.cpp" />
+    <ClCompile Include="..\src\HelloKinectApp.cpp" />
     <ClCompile Include="..\..\..\..\Cinder-KCB2\src\Kinect2.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\Resources.h" />
     <ClInclude Include="..\..\..\..\Cinder-KCB2\src\Kinect2.h" />
     <ClInclude Include="..\..\..\code\include\KinectProcessingGlsl.h" />
+    <ClInclude Include="..\..\..\code\include\multitrack\Controller.h" />
+    <ClInclude Include="..\..\..\code\include\multitrack\Timer.h" />
+    <ClInclude Include="..\..\..\code\include\multitrack\Track.h" />
+    <ClInclude Include="..\..\..\code\include\multitrack\TrackGroup.h" />
+    <ClInclude Include="..\..\..\code\include\multitrack\TypeTrack.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
