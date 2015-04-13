@@ -1,0 +1,82 @@
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav</Extensions>
+    </Filter>
+    <Filter Include="Blocks">
+      <UniqueIdentifier>{6FD0B66D-4524-49DD-9229-06DCC2452B48}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Blocks\Cinder-KCB2">
+      <UniqueIdentifier>{14D4415C-F9B8-4028-931C-AD3260F8C92C}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Blocks\Cinder-KCB2\src">
+      <UniqueIdentifier>{BAEB51F7-E6CC-43CD-A588-EB771C2EB1F7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Blocks\KinectRecordingTools">
+      <UniqueIdentifier>{B00BB4E5-1437-414A-85E3-B0C12A4ED4C3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Blocks\KinectRecordingTools\code">
+      <UniqueIdentifier>{B83AE2F7-53C6-4D5C-B04B-1E4EABA0901D}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Blocks\KinectRecordingTools\code\include">
+      <UniqueIdentifier>{CE25357B-FC62-481A-9B90-A686FB0FAE57}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Blocks\KinectRecordingTools\code\include\multitrack">
+      <UniqueIdentifier>{6A74CAF6-1C7E-4476-90F7-94067AC5ACB1}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\src\ProjectionSampleApp.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\ProjectionSampleApp.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClInclude Include="..\include\Resources.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\..\..\Cinder-KCB2\src\Kinect2.cpp">
+      <Filter>Blocks\Cinder-KCB2\src</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\..\..\Cinder-KCB2\src\Kinect2.h">
+      <Filter>Blocks\Cinder-KCB2\src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\code\include\KinectProcessingGlsl.h">
+      <Filter>Blocks\KinectRecordingTools\code\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\code\include\multitrack\Controller.h">
+      <Filter>Blocks\KinectRecordingTools\code\include\multitrack</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\code\include\multitrack\Timer.h">
+      <Filter>Blocks\KinectRecordingTools\code\include\multitrack</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\code\include\multitrack\Track.h">
+      <Filter>Blocks\KinectRecordingTools\code\include\multitrack</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\code\include\multitrack\TrackGroup.h">
+      <Filter>Blocks\KinectRecordingTools\code\include\multitrack</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\code\include\multitrack\TypeTrack.h">
+      <Filter>Blocks\KinectRecordingTools\code\include\multitrack</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\include\Resources.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="Resources.rc">
+      <Filter>Resource Files</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+</Project>

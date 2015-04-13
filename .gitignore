@@ -28,6 +28,8 @@ build/
 *.la
 *.a
 *.lib
+*.sdf
+*.opensdf
 
 # Executables
 *.exe
