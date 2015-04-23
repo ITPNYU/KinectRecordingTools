@@ -1,4 +1,4 @@
-#include "cinder/app/AppNative.h"
+#include "cinder/app/App.h"
 #include "cinder/app/RendererGl.h"
 #include "cinder/gl/gl.h"
 #include "Projection.h"
@@ -13,13 +13,12 @@ using namespace ci::app;
 using namespace std;
 using namespace itp;
 
-class ProjectionSampleApp : public AppNative {
+class ProjectionSampleApp : public App {
   public:
 	void setup() override;
 	void mouseDown( MouseEvent event ) override;
 	void update() override;
 	void draw() override;
-	void prepareSettings(Settings *settings);
 
 	// CAMERAS
 	CameraPersp	mPcam;
@@ -29,12 +28,6 @@ class ProjectionSampleApp : public AppNative {
 
 	Projection persp, ortho;	
 };
-
-void ProjectionSampleApp::prepareSettings(Settings *settings)
-{
-	settings->setWindowSize(1280, 720);
-	settings->setFrameRate(60.0f);
-}
 
 void ProjectionSampleApp::setup()
 {
@@ -69,10 +62,10 @@ void ProjectionSampleApp::update()
 
 	// Test World to Screen projection. Ensure Projection.setView() is setup.
 	vec3 randomPoint = vec3(rand() % 100, rand() % 100, rand() % 100);
-	cout << "Point in World space: " << randomPoint << endl;
-	cout << "Perspective screen space: " << persp.worldToScreen(randomPoint) << endl;
-	cout << "Orthogonal screen space: " << ortho.worldToScreen(randomPoint) << endl << endl;
-	cout << "=====================================" << endl << endl;
+	ci::app::console() << "Point in World space: " << randomPoint << endl;
+	ci::app::console() << "Perspective screen space: " << persp.worldToScreen(randomPoint) << endl;
+	ci::app::console() << "Orthogonal screen space: " << ortho.worldToScreen(randomPoint) << endl << endl;
+	ci::app::console() << "=====================================" << endl << endl;
 }
 
 void ProjectionSampleApp::draw()
@@ -81,4 +74,8 @@ void ProjectionSampleApp::draw()
 
 }
 
-CINDER_APP_NATIVE( ProjectionSampleApp, RendererGl )
+CINDER_APP(ProjectionSampleApp, RendererGl, [](App::Settings* settings)
+{
+	settings->prepareWindow(Window::Format().size(1280, 720).title("ITP Kinect Recording Tools"));
+	settings->setFrameRate(60.0f);
+} )
