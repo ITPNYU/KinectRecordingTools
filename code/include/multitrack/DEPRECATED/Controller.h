@@ -1,8 +1,9 @@
 #pragma once
 
+#include "TrackGroup.h"
+
 #include <multitrack/Track.h>
 #include <multitrack/TypeTrack.h>
-#include <multitrack/TrackGroup.h>
 
 namespace itp { namespace multitrack {
 	
@@ -17,15 +18,11 @@ namespace itp { namespace multitrack {
 		Timer::Ref		mTimer;
 		TrackGroup::Ref	mSequence;
 		Track::RefDeque	mRecordingDevices;
-		ci::fs::path	mDirectory;
-		size_t			mUidGenerator;
 		
 		/** @brief default constructor */
-		Controller(const ci::fs::path& iDirectory) :
-			mTimer( Timer::create() ),
-			mSequence( TrackGroup::create( mTimer ) ),
-			mDirectory( iDirectory ),
-			mUidGenerator( 0 )
+		Controller() :
+		mTimer( Timer::create() ),
+		mSequence( TrackGroup::create( mTimer ) )
 		{ /* no-op */ }
 		
 	public:
@@ -84,9 +81,7 @@ namespace itp { namespace multitrack {
 		
 		template <typename T> void addRecorder(std::function<T(void)> iRecorderCallbackFn, std::function<void(const T&)> iPlayerCallbackFn)
 		{
-			mRecordingDevices.push_back(mSequence->addTrackRecorder<T>( mDirectory, "track_" + std::to_string( mUidGenerator ), iRecorderCallbackFn, iPlayerCallbackFn));
-			// Increment uid generator:
-			mUidGenerator++;
+			mRecordingDevices.push_back(mSequence->addTrackRecorder<T>(iRecorderCallbackFn, iPlayerCallbackFn));
 		}
 	};
 	

@@ -2,6 +2,8 @@
 #include "cinder/app/RendererGl.h"
 #include "cinder/gl/gl.h"
 #include "cinder/gl/Fbo.h"
+#include "cinder/ImageIo.h"
+#include "cinder/Utilities.h"
 
 #include "Kinect2.h"
 
@@ -99,7 +101,7 @@ void HelloKinectMultitrackApp::setup()
 	ci::gl::Fbo::Format tSilhouetteFboFormat;
 	mSilhouetteFbo = ci::gl::Fbo::create(RAW_FRAME_WIDTH, RAW_FRAME_HEIGHT, tSilhouetteFboFormat.colorTexture());
 	// Setup multitrack controller:
-	mMultitrackController = itp::multitrack::Controller::create();
+	mMultitrackController = itp::multitrack::Controller::create(getHomeDirectory() / "Desktop" / "Tests");
 	mMultitrackController->start();
 }
 
@@ -163,8 +165,14 @@ void HelloKinectMultitrackApp::keyUp(KeyEvent event)
 		// Create image recorder callback lambda:
 		auto tImgRecorderCallbackFn = [&](void) -> ci::SurfaceRef
 		{
+			// Render frame:
 			renderSilhouette();
-			return std::make_shared<Surface8u>(mSilhouetteFbo->readPixels8u(mSilhouetteFbo->getBounds()));
+			// Pull rendered surface:
+			Surface8uRef tSurface = std::make_shared<Surface8u>(mSilhouetteFbo->readPixels8u(mSilhouetteFbo->getBounds()));
+			// TODO: write image:
+			//writeImage(getHomeDirectory() / "cinder" / "saveImage_" / (toString(0) + ".png"), *tSurface);
+			// Return surface:
+			return tSurface;
 		};
 		// Create image player callback lambda:
 		auto tImgPlayerCallbackFn = [&](const ci::SurfaceRef& iSurface) -> void
@@ -175,6 +183,10 @@ void HelloKinectMultitrackApp::keyUp(KeyEvent event)
 		};
 		// Create image recorder track:
 		mMultitrackController->addRecorder<ci::SurfaceRef>(tImgRecorderCallbackFn, tImgPlayerCallbackFn);
+		/*
+		// TODO: To reinstate the code below, need to implement:
+		// read_from_file() and write_to_file() for Kinect2::BodyFrame in TypeTrack.h
+
 		// Create body recorder callback lambda:
 		auto tBodyRecorderCallbackFn = [&](void) -> std::shared_ptr<Kinect2::BodyFrame>
 		{
@@ -183,7 +195,7 @@ void HelloKinectMultitrackApp::keyUp(KeyEvent event)
 		// Create body player callback lambda:
 		auto tBodyPlayerCallbackFn = [&](const std::shared_ptr<Kinect2::BodyFrame>& iFrame) -> void
 		{
-			if (iFrame.get() == NULL) return;
+			if (iFrame.get() == NULL || mChannelBody.get() == NULL) return;
 			gl::ScopedMatrices scopeMatrices;
 			gl::scale(vec2(getWindowSize()) / vec2(mChannelBody->getSize()));
 			gl::disable(GL_TEXTURE_2D);
@@ -205,6 +217,7 @@ void HelloKinectMultitrackApp::keyUp(KeyEvent event)
 		};
 		// Create body recorder track:
 		mMultitrackController->addRecorder< std::shared_ptr<Kinect2::BodyFrame> >(tBodyRecorderCallbackFn, tBodyPlayerCallbackFn);
+		*/
 		//
 		break;
 	}

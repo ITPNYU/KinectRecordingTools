@@ -1,7 +1,6 @@
 #pragma once
 
 #include <multitrack/Track.h>
-#include <multitrack/TypeTrack.h>
 
 namespace itp { namespace multitrack {
 
@@ -67,13 +66,10 @@ namespace itp { namespace multitrack {
 			mTracks.push_back( iTrack );
 		}
 		
-		template <typename T> Track::Ref addTrackRecorder(const ci::fs::path& iDirectory,
-														  const std::string& iName,
-														  std::function<T(void)> iRecorderCallbackFn,
-														  std::function<void(const T&)> iPlayerCallbackFn)
+		template <typename T> Track::Ref addTrackRecorder(std::function<T(void)> iRecorderCallbackFn, std::function<void(const T&)> iPlayerCallbackFn)
 		{
 			// Create typed track:
-			typename TrackT<T>::Ref tTrack = TrackT<T>::create( iDirectory, iName, getRef<TrackGroup>() );
+			typename TrackT<T>::Ref tTrack = TrackT<T>::create( getRef<TrackGroup>() );
 			// Add track to controller:
 			addTrack( tTrack );
 			// Start recorder:

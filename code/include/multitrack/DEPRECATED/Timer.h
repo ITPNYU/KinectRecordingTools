@@ -1,11 +1,9 @@
 #pragma once
 
-#include <stdexcept>
+#include <memory>
 #include <iostream>
 #include <sstream>
-#include <fstream>
 #include <string>
-#include <memory>
 
 #include "cinder/gl/gl.h"
 

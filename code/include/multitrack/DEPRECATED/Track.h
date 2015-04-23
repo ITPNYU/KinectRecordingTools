@@ -11,8 +11,12 @@ namespace itp { namespace multitrack {
 		typedef std::shared_ptr<TrackBase> Ref;
 		
 	protected:
+		
 		/** @brief default constructor */
-		TrackBase() { /* no-op */ }
+		TrackBase()
+		{
+			/* no-op */
+		}
 		
 	public:
 		
@@ -114,12 +118,6 @@ namespace itp { namespace multitrack {
 			mOffset = iOffset;
 		}
 		
-		/** @brief sets track's local offset to current time (in seconds) */
-		void setLocalOffsetToCurrent()
-		{
-			mOffset = mTimer->getPlayhead();
-		}
-
 		/** @brief returns track's local offset (in seconds) */
 		double getLocalOffset() const
 		{
