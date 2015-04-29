@@ -1,0 +1,112 @@
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav</Extensions>
+    </Filter>
+    <Filter Include="Blocks">
+      <UniqueIdentifier>{9C068461-EFFD-4DAF-A514-709B31CCDCD0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Blocks\Cinder-KCB2">
+      <UniqueIdentifier>{4CBD5CC4-8C72-4483-9620-86AC51240B5E}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Blocks\Cinder-KCB2\src">
+      <UniqueIdentifier>{6C4CE03D-928B-4B03-A74E-0EA7FCACA9E0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Blocks\FoilOSS">
+      <UniqueIdentifier>{33D61D76-5C61-4C9C-93B7-B72E8723388E}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Blocks\FoilOSS\foil">
+      <UniqueIdentifier>{E2C7BAB2-A5B7-48B2-BBEE-7BB6E93F6836}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Blocks\FoilOSS\foil\include">
+      <UniqueIdentifier>{E47675E3-E56C-45C1-9B0F-87D8ED80489D}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Blocks\FoilOSS\foil\include\foil">
+      <UniqueIdentifier>{A0E58E98-9500-4387-BE24-860DD437B52A}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Blocks\FoilOSS\foil\include\foil\oss">
+      <UniqueIdentifier>{91976455-92F7-484F-A496-0E68620E80AC}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Blocks\FoilOSS\foil\include\foil\oss\gesture">
+      <UniqueIdentifier>{4163C577-DEB6-4149-B36B-450F37973D8F}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Blocks\KinectRecordingTools">
+      <UniqueIdentifier>{3E8A07A1-DC34-4FA5-85AE-97E788483D5B}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Blocks\KinectRecordingTools\code">
+      <UniqueIdentifier>{43EECEEC-BC89-4303-ACC1-750518D9A8F8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Blocks\KinectRecordingTools\code\include">
+      <UniqueIdentifier>{490949BF-B462-4A21-A291-BA4E3D3933C2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Blocks\KinectRecordingTools\code\include\multitrack">
+      <UniqueIdentifier>{77E45BCB-4139-4989-AD3B-62C2D2B66134}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\src\HelloKinectMultitrackGestureApp.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\HelloKinectMultitrackGestureApp.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClInclude Include="..\include\Resources.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\..\..\Cinder-KCB2\src\Kinect2.cpp">
+      <Filter>Blocks\Cinder-KCB2\src</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\..\..\Cinder-KCB2\src\Kinect2.h">
+      <Filter>Blocks\Cinder-KCB2\src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\foil_oss\foil\include\foil\oss\gesture\recognizer.hpp">
+      <Filter>Blocks\FoilOSS\foil\include\foil\oss\gesture</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\foil_oss\foil\include\foil\oss\gesture\recognizer_helpers.hpp">
+      <Filter>Blocks\FoilOSS\foil\include\foil\oss\gesture</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\foil_oss\foil\include\foil\oss\gesture\recognizer_types.hpp">
+      <Filter>Blocks\FoilOSS\foil\include\foil\oss\gesture</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\code\include\KinectProcessingGlsl.h">
+      <Filter>Blocks\KinectRecordingTools\code\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\code\include\Projection.h">
+      <Filter>Blocks\KinectRecordingTools\code\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\code\include\multitrack\Controller.h">
+      <Filter>Blocks\KinectRecordingTools\code\include\multitrack</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\code\include\multitrack\Timer.h">
+      <Filter>Blocks\KinectRecordingTools\code\include\multitrack</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\code\include\multitrack\Track.h">
+      <Filter>Blocks\KinectRecordingTools\code\include\multitrack</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\code\include\multitrack\TrackGroup.h">
+      <Filter>Blocks\KinectRecordingTools\code\include\multitrack</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\code\include\multitrack\TypeTrack.h">
+      <Filter>Blocks\KinectRecordingTools\code\include\multitrack</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\include\Resources.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="Resources.rc">
+      <Filter>Resource Files</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+</Project>

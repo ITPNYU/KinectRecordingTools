@@ -63,6 +63,14 @@ namespace itp { namespace multitrack {
 		{
 			mActive = false;
 		}
+
+		/** @brief timer reset method */
+		void reset()
+		{
+			mActive   = false;
+			mStart    = 0.0;
+			mPlayhead = 0.0;
+		}
 	};
 	
 } } // namespace itp::multitrack

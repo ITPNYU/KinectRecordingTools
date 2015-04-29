@@ -84,8 +84,14 @@ namespace itp { namespace multitrack {
 			/* no-op */
 		}
 		
+		/** @brief returns const shared_ptr to sequence timer */
+		Timer::ConstRef getTimer() const
+		{
+			return mTimer;
+		}
+
 		/** @brief returns shared_ptr to sequence timer */
-		Timer::Ref getTimer() const
+		Timer::Ref getTimer()
 		{
 			return mTimer;
 		}

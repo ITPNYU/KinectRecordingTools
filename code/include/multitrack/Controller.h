@@ -59,6 +59,11 @@ namespace itp { namespace multitrack {
 			mSequence->stop();
 		}
 
+		void resetTimer()
+		{
+			mTimer->reset();
+		}
+
 		void cancelRecorder()
 		{
 			for (auto& tDevice : mRecordingDevices) {

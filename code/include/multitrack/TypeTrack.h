@@ -14,19 +14,19 @@ namespace itp { namespace multitrack {
 
 	struct PointCloud
 	{
-		std::vector<ci::vec2> mPoints;
+		std::deque<ci::vec2> mPoints;
 
 		PointCloud()
 		{
 			/* no-op */
 		}
 
-		PointCloud(const Kinect2::BodyFrame& frame, const Kinect2::DeviceRef& device)
+		PointCloud(const Kinect2::BodyFrame& frame, const Kinect2::DeviceRef& device, bool includeAll = true)
 		{
 			for (const Kinect2::Body& body : frame.getBodies()) {
 				if (body.isTracked()) {
 					for (const auto& joint : body.getJointMap()) {
-						if (joint.second.getTrackingState() == TrackingState::TrackingState_Tracked) {
+						if (includeAll || joint.second.getTrackingState() == TrackingState::TrackingState_Tracked) {
 							mPoints.push_back(device->mapCameraToDepth(joint.second.getPosition()));
 						}
 					}
