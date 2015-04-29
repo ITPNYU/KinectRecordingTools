@@ -165,14 +165,8 @@ void HelloKinectMultitrackApp::keyUp(KeyEvent event)
 		// Create image recorder callback lambda:
 		auto tImgRecorderCallbackFn = [&](void) -> ci::SurfaceRef
 		{
-			// Render frame:
 			renderSilhouette();
-			// Pull rendered surface:
-			Surface8uRef tSurface = std::make_shared<Surface8u>(mSilhouetteFbo->readPixels8u(mSilhouetteFbo->getBounds()));
-			// TODO: write image:
-			//writeImage(getHomeDirectory() / "cinder" / "saveImage_" / (toString(0) + ".png"), *tSurface);
-			// Return surface:
-			return tSurface;
+			return std::make_shared<Surface8u>(mSilhouetteFbo->readPixels8u(mSilhouetteFbo->getBounds()));
 		};
 		// Create image player callback lambda:
 		auto tImgPlayerCallbackFn = [&](const ci::SurfaceRef& iSurface) -> void
@@ -183,41 +177,26 @@ void HelloKinectMultitrackApp::keyUp(KeyEvent event)
 		};
 		// Create image recorder track:
 		mMultitrackController->addRecorder<ci::SurfaceRef>(tImgRecorderCallbackFn, tImgPlayerCallbackFn);
-		/*
-		// TODO: To reinstate the code below, need to implement:
-		// read_from_file() and write_to_file() for Kinect2::BodyFrame in TypeTrack.h
 
 		// Create body recorder callback lambda:
-		auto tBodyRecorderCallbackFn = [&](void) -> std::shared_ptr<Kinect2::BodyFrame>
+		auto tBodyRecorderCallbackFn = [&](void) -> itp::multitrack::PointCloudRef
 		{
-			return std::make_shared<Kinect2::BodyFrame>(mBodyFrame);
+			return std::make_shared<itp::multitrack::PointCloud>(itp::multitrack::PointCloud(mBodyFrame, mDevice));
 		};
 		// Create body player callback lambda:
-		auto tBodyPlayerCallbackFn = [&](const std::shared_ptr<Kinect2::BodyFrame>& iFrame) -> void
+		auto tBodyPlayerCallbackFn = [&](const itp::multitrack::PointCloudRef& iFrame) -> void
 		{
 			if (iFrame.get() == NULL || mChannelBody.get() == NULL) return;
 			gl::ScopedMatrices scopeMatrices;
 			gl::scale(vec2(getWindowSize()) / vec2(mChannelBody->getSize()));
 			gl::disable(GL_TEXTURE_2D);
-			for (const Kinect2::Body& body : iFrame->getBodies()) {
-				if (body.isTracked()) {
-					gl::color(ColorAf::white());
-					for (const auto& joint : body.getJointMap()) {
-						if (joint.second.getTrackingState() == TrackingState::TrackingState_Tracked) {
-							vec2 pos(mDevice->mapCameraToDepth(joint.second.getPosition()));
-							gl::drawSolidCircle(pos, 5.0f, 32);
-							vec2 parent(mDevice->mapCameraToDepth(
-								body.getJointMap().at(joint.second.getParentJoint()).getPosition()
-								));
-							gl::drawLine(pos, parent);
-						}
-					}
-				}
+			gl::color(ColorAf::white());
+			for (const auto& pt : iFrame->mPoints) {
+				gl::drawSolidCircle(pt, 5.0f, 32);
 			}
 		};
 		// Create body recorder track:
-		mMultitrackController->addRecorder< std::shared_ptr<Kinect2::BodyFrame> >(tBodyRecorderCallbackFn, tBodyPlayerCallbackFn);
-		*/
+		mMultitrackController->addRecorder<itp::multitrack::PointCloudRef>(tBodyRecorderCallbackFn, tBodyPlayerCallbackFn);
 		//
 		break;
 	}
