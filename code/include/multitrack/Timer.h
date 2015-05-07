@@ -54,8 +54,9 @@ namespace itp { namespace multitrack {
 		/** @brief timer start method */
 		void start()
 		{
-			mActive = true;
-			mStart  = ci::app::getElapsedSeconds();
+			mActive   = true;
+			mStart    = ci::app::getElapsedSeconds();
+			mPlayhead = 0.0f;
 		}
 		
 		/** @brief timer stop method */

@@ -4,6 +4,7 @@
 #include "cinder/gl/Fbo.h"
 #include "cinder/ImageIo.h"
 #include "cinder/Utilities.h"
+#include "cinder/Timeline.h"
 
 #include "Kinect2.h"
 
@@ -12,26 +13,38 @@
 
 #include <foil/oss/gesture/recognizer.hpp>
 
-#define RAW_FRAME_WIDTH  1920
-#define RAW_FRAME_HEIGHT 1080
-
 using namespace ci;
 using namespace ci::app;
 using namespace std;
 
+#define RAW_FRAME_WIDTH  1920
+#define RAW_FRAME_HEIGHT 1080
+
+static const double kRecognitionThreshold  = 0.85;
+
 enum AppState
 {
+	NONE,
 	IDLE,
 	WAIT_FOR_SINGLE_USER,
 	ESTABLISH_IDLE_POSE,
 	ESTABLISH_CONTROL_POSE,
 	BEGIN_RECORDING,
-	END_RECORDING,
 	RECORDING_TRACK
 };
 
-static const double kDirectiveCountdownSec = 3.0;
-static const double kRecognitionThreshold  = 0.85;
+struct GestureHolder
+{
+	AppState	m_targ;
+	size_t		m_pos;
+	size_t		m_neg;
+
+	GestureHolder(AppState targ = AppState::NONE)
+		: m_targ(targ), m_pos(0), m_neg(0) { /* no-op */ }
+
+	// TODO UNUSED WORK IN PROGRESS !
+};
+
 
 class HelloKinectMultitrackGestureApp : public App {
 public:
@@ -43,9 +56,12 @@ public:
 	void mouseDown(MouseEvent event) override;
 	void keyUp(KeyEvent event) override;
 
-	void startRecording();
-	void completeRecording();
-	void cancelRecording();
+	void transitionToState(AppState targetState, float transitionDuration, const std::string& updateMsg);
+	void startStateTransition();
+	void updateStateTransition(const std::string& updateMsg);
+	void finishStateTransition(AppState targetState);
+
+	void addTrack();
 
 	bool addGestureTemplate(const std::string& poseName);
 	void renderSilhouette();
@@ -77,8 +93,14 @@ public:
 	ci::Font							mFont;
 	std::string							mInfoLabel;
 	AppState							mAppState;
-	double								mStateStartTime;
 	size_t								mActiveBodyCount;
+
+	float								mStateTransitionShort;
+	float								mStateTransitionMedium;
+	float								mStateTransitionLong;
+
+	bool								mInStateTransition;
+	ci::Anim<float>						mTransitionAnim;
 
 	bool								mEstablishedPoseIdle;
 	bool								mEstablishedPoseControl;
@@ -141,14 +163,20 @@ void HelloKinectMultitrackGestureApp::setup()
 	// Setup multitrack controller:
 	mMultitrackController = itp::multitrack::Controller::create(getHomeDirectory() / "Desktop" / "Tests");
 	mMultitrackController->start();
-	// Setup application state:
-	mFont = Font("Helvetica", 24);
+	// Set default state transition duration:
+	mStateTransitionShort  = 2.0f;
+	mStateTransitionMedium = 4.0f;
+	mStateTransitionLong   = 6.0f;
+	// Initialize application state:
+	mFont = Font("Helvetica", 40);
 	mInfoLabel = "";
 	mAppState = AppState::WAIT_FOR_SINGLE_USER;
-	mStateStartTime = 0.0;
 	mActiveBodyCount = 0;
+	mInStateTransition = false;
 	mEstablishedPoseIdle = false;
 	mEstablishedPoseControl = false;
+	// Add initial track:
+	addTrack();
 }
 
 void HelloKinectMultitrackGestureApp::update()
@@ -176,23 +204,23 @@ void HelloKinectMultitrackGestureApp::update()
 			}
 		}
 	}
-	// Check for single user:
-	if (mActiveBodyCount == 1) {
-		if (mAppState == AppState::WAIT_FOR_SINGLE_USER) {
-			mAppState = AppState::IDLE;
-			mInfoLabel = "";
-			//mMultitrackController->cancelRecorder();
-			//mMultitrackController->stop();
-			//mMultitrackController->resetTimer();
+
+	// If in state transition, block new transitions:
+	if (!mInStateTransition) {
+		// Handle states:
+		if (mActiveBodyCount != 1) {
+			mAppState = AppState::WAIT_FOR_SINGLE_USER;
+			mInfoLabel = "I see " + std::to_string(mActiveBodyCount) + " users, but need one.";
+		}
+		else if (mAppState == AppState::WAIT_FOR_SINGLE_USER) {
+			transitionToState(AppState::IDLE, mStateTransitionMedium, "Oh hello! We'll get started in ");
 		}
 		else if (mAppState == AppState::IDLE) {
 			if (!mEstablishedPoseIdle) {
-				mAppState = AppState::ESTABLISH_IDLE_POSE;
-				mStateStartTime = getElapsedSeconds();
+				transitionToState(AppState::ESTABLISH_IDLE_POSE, mStateTransitionLong, "Establishing IDLE POSE in ");
 			}
 			else if (!mEstablishedPoseControl) {
-				mAppState = AppState::ESTABLISH_CONTROL_POSE;
-				mStateStartTime = getElapsedSeconds();
+				transitionToState(AppState::ESTABLISH_CONTROL_POSE, mStateTransitionLong, "Establishing CONTROL POSE in ");
 			}
 			else {
 				// Check whether recognizer has templates:
@@ -205,9 +233,7 @@ void HelloKinectMultitrackGestureApp::update()
 						foil::gesture::Result tResult = mRecognizer.recognizeBest({ tCloud.mPoints });
 						// Check for control gesture:
 						if (tResult.mName == "CONTROL" && tResult.mScore >= kRecognitionThreshold) {
-							mAppState = AppState::BEGIN_RECORDING;
-							mInfoLabel = "";
-							mStateStartTime = getElapsedSeconds();
+							transitionToState(AppState::BEGIN_RECORDING, mStateTransitionLong, "Recording performance in ");
 						}
 						else {
 							mInfoLabel = "Best guess: " + tResult.mName + " " + std::to_string(tResult.mScore);
@@ -217,47 +243,21 @@ void HelloKinectMultitrackGestureApp::update()
 			}
 		}
 		else if (mAppState == AppState::ESTABLISH_IDLE_POSE) {
-			double tDelta = getElapsedSeconds() - mStateStartTime;
-			if (kDirectiveCountdownSec - tDelta <= 0.0) {
-				if (addGestureTemplate("IDLE")) {
-					mEstablishedPoseIdle = true;
-				}
-				mAppState = AppState::IDLE;
-				mInfoLabel = "";
+			if (addGestureTemplate("IDLE")) {
+				mEstablishedPoseIdle = true;
 			}
-			else {
-				mInfoLabel = std::to_string(kDirectiveCountdownSec - tDelta) + " seconds remaining to establish idle pose";
-			}
+			transitionToState(AppState::IDLE, mStateTransitionShort, "Thanks! We'll be back in ");
 		}
 		else if (mAppState == AppState::ESTABLISH_CONTROL_POSE) {
-			double tDelta = getElapsedSeconds() - mStateStartTime;
-			if (kDirectiveCountdownSec - tDelta <= 0.0) {
-				if (addGestureTemplate("CONTROL")) {
-					mEstablishedPoseControl = true;
-				}
-				mAppState = AppState::IDLE;
-				mInfoLabel = "";
+			if (addGestureTemplate("CONTROL")) {
+				mEstablishedPoseControl = true;
 			}
-			else {
-				mInfoLabel = std::to_string(kDirectiveCountdownSec - tDelta) + " seconds remaining to establish control pose";
-			}
+			transitionToState(AppState::IDLE, mStateTransitionShort, "Thanks! We'll be back in ");
 		}
 		else if (mAppState == AppState::BEGIN_RECORDING) {
-			double tDelta = getElapsedSeconds() - mStateStartTime;
-			if (kDirectiveCountdownSec - tDelta <= 0.0) {
-				mAppState = AppState::RECORDING_TRACK;
-				mInfoLabel = "";
-				startRecording();
-			}
-			else {
-				mInfoLabel = std::to_string(kDirectiveCountdownSec - tDelta) + " seconds before recording begins";
-			}
-		}
-		else if (mAppState == AppState::END_RECORDING) {
-			double tDelta = getElapsedSeconds() - mStateStartTime;
-			if (kDirectiveCountdownSec - tDelta <= 0.0) {
-				mAppState = AppState::IDLE;
-			}
+			mMultitrackController->start();
+			mAppState = AppState::RECORDING_TRACK;
+			mInfoLabel = "";
 		}
 		else if (mAppState == AppState::RECORDING_TRACK) {
 			// Check whether recognizer has templates:
@@ -270,18 +270,15 @@ void HelloKinectMultitrackGestureApp::update()
 					foil::gesture::Result tResult = mRecognizer.recognizeBest({ tCloud.mPoints });
 					// Check for control gesture:
 					if (tResult.mName == "CONTROL" && tResult.mScore >= kRecognitionThreshold) {
-						mAppState = AppState::END_RECORDING;
-						mInfoLabel = "";
-						mStateStartTime = getElapsedSeconds();
-						completeRecording();
+						// Complete track:
+						mMultitrackController->completeRecorder();
+						// Setup next preview track and return to idle state:
+						addTrack();
+						transitionToState(AppState::IDLE, mStateTransitionShort, "Thanks! We'll be back in ");
 					}
 				}
 			}
 		}
-	}
-	else {
-		mAppState = AppState::WAIT_FOR_SINGLE_USER;
-		mInfoLabel = "I see " + std::to_string(mActiveBodyCount) + " users, but need one.";
 	}
 	// Update multitrack controller:
 	mMultitrackController->update();
@@ -293,19 +290,14 @@ void HelloKinectMultitrackGestureApp::draw()
 	gl::enableAlphaBlending();
 	gl::setMatricesWindow(getWindowSize());
 	gl::enable(GL_TEXTURE_2D);
-	//
+	// Draw controller:
+	mMultitrackController->draw();
+	// Draw info:
 	if (!mInfoLabel.empty())
 		gl::drawStringCentered(mInfoLabel, vec2(getWindowWidth() * 0.5f, getWindowHeight() - 100.0f), Color(1, 1, 1), mFont);
-	//
-	switch (mAppState) {
-		case AppState::WAIT_FOR_SINGLE_USER: {
-			break;
-		}
-		default: {
-			mMultitrackController->draw();
-			break;
-		}
-	}
+	// Draw time:
+	if (mAppState == AppState::RECORDING_TRACK)
+		gl::drawString(std::to_string(mMultitrackController->getTimer()->getPlayhead()), vec2(25, 25), Color(1, 1, 1), mFont);
 }
 
 void HelloKinectMultitrackGestureApp::cleanup()
@@ -319,24 +311,35 @@ void HelloKinectMultitrackGestureApp::mouseDown(MouseEvent event)
 
 void HelloKinectMultitrackGestureApp::keyUp(KeyEvent event)
 {
-	switch (event.getChar()) {
-	case 'r': {
-		cancelRecording();
-		break;
-	}
-	case 'a': {
-		startRecording();
-		break;
-	}
-	case 'c': {
-		completeRecording();
-		break;
-	}
-	default: { break; }
-	}
 }
 
-void HelloKinectMultitrackGestureApp::startRecording()
+void HelloKinectMultitrackGestureApp::transitionToState(AppState targetState, float transitionDuration, const std::string& updateMsg)
+{
+	mTransitionAnim = transitionDuration;
+	ci::app::timeline().apply(&mTransitionAnim, 0.0f, transitionDuration, EaseNone())
+		.startFn(std::bind(&HelloKinectMultitrackGestureApp::startStateTransition, this))
+		.updateFn(std::bind(&HelloKinectMultitrackGestureApp::updateStateTransition, this, updateMsg))
+		.finishFn(std::bind(&HelloKinectMultitrackGestureApp::finishStateTransition, this, targetState))
+		;
+}
+
+void HelloKinectMultitrackGestureApp::startStateTransition()
+{
+	mInStateTransition = true;
+}
+
+void HelloKinectMultitrackGestureApp::updateStateTransition(const std::string& updateMsg)
+{
+	mInfoLabel = updateMsg + std::to_string(static_cast<int>(mTransitionAnim)) + " seconds";
+}
+
+void HelloKinectMultitrackGestureApp::finishStateTransition(AppState targetState)
+{
+	mAppState = targetState;
+	mInStateTransition = false;
+}
+
+void HelloKinectMultitrackGestureApp::addTrack()
 {
 	// Create image recorder callback lambda:
 	auto tImgRecorderCallbackFn = [&](void) -> ci::SurfaceRef
@@ -353,7 +356,7 @@ void HelloKinectMultitrackGestureApp::startRecording()
 	};
 	// Create image recorder track:
 	mMultitrackController->addRecorder<ci::SurfaceRef>(tImgRecorderCallbackFn, tImgPlayerCallbackFn);
-
+	/*
 	// Create body recorder callback lambda:
 	auto tBodyRecorderCallbackFn = [&](void) -> itp::multitrack::PointCloudRef
 	{
@@ -368,23 +371,12 @@ void HelloKinectMultitrackGestureApp::startRecording()
 		gl::disable(GL_TEXTURE_2D);
 		gl::color(ColorAf::white());
 		for (const auto& pt : iFrame->mPoints) {
-			gl::drawSolidCircle(pt, 5.0f, 32);
+			gl::drawSolidCircle(pt, 3.0f, 10);
 		}
 	};
 	// Create body recorder track:
 	mMultitrackController->addRecorder<itp::multitrack::PointCloudRef>(tBodyRecorderCallbackFn, tBodyPlayerCallbackFn);
-}
-
-void HelloKinectMultitrackGestureApp::completeRecording()
-{
-	mMultitrackController->completeRecorder();
-	mMultitrackController->start();
-}
-
-void HelloKinectMultitrackGestureApp::cancelRecording()
-{
-	mMultitrackController->cancelRecorder();
-	mMultitrackController->start();
+	*/
 }
 
 bool HelloKinectMultitrackGestureApp::addGestureTemplate(const std::string& poseName)

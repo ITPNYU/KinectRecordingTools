@@ -64,32 +64,48 @@ namespace itp { namespace multitrack {
 			mTimer->reset();
 		}
 
+		Timer::Ref getTimer() const
+		{
+			return mTimer;
+		}
+
 		void cancelRecorder()
 		{
+			// Iterate over recording devices:
 			for (auto& tDevice : mRecordingDevices) {
+				// Check current device validity:
 				if (tDevice) {
-					tDevice->stop();
+					// Remove track:
 					mSequence->removeTrack(tDevice);
-					tDevice.reset();
 				}
 			}
+			// Clear recording devices:
 			mRecordingDevices.clear();
 		}
 		
 		void completeRecorder()
 		{
+			// Iterate over recording devices:
 			for (auto& tDevice : mRecordingDevices) {
+				// Check current device validity:
 				if (tDevice) {
-					tDevice->gotoPlayMode();
-					tDevice.reset();
+					// Convert non-empty track to player:
+					if ( tDevice->getFrameCount() > 0 ) {
+						tDevice->gotoPlayMode();
+					}
+					// Remove empty track:
+					else {
+						mSequence->removeTrack(tDevice);
+					}
 				}
 			}
+			// Clear recording devices:
 			mRecordingDevices.clear();
 		}
 		
-		template <typename T> void addRecorder(std::function<T(void)> iRecorderCallbackFn, std::function<void(const T&)> iPlayerCallbackFn)
+		template <typename T> void addRecorder(std::function<T(void)> recorderCb, std::function<void(const T&)> playerCb)
 		{
-			mRecordingDevices.push_back(mSequence->addTrackRecorder<T>( mDirectory, "track_" + std::to_string( mUidGenerator ), iRecorderCallbackFn, iPlayerCallbackFn));
+			mRecordingDevices.push_back(mSequence->addTrack<T>(mDirectory, "track_" + std::to_string(mUidGenerator), recorderCb, playerCb));
 			// Increment uid generator:
 			mUidGenerator++;
 		}

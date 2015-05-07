@@ -34,17 +34,17 @@ namespace itp { namespace multitrack {
 			return std::dynamic_pointer_cast<T>( shared_from_this() );
 		}
 		
-		/** @brief overloadable update method */
-		virtual void update() { /* no-op */ }
+		/** @brief pure virtual update method */
+		virtual void update() = 0;
 		
-		/** @brief overloadable draw method */
-		virtual void draw() { /* no-op */ }
+		/** @brief pure virtual draw method */
+		virtual void draw() = 0;
 		
-		/** @brief overloadable start method */
-		virtual void start() { /* no-op */ }
+		/** @brief pure virtual start method */
+		virtual void start() = 0;
 		
-		/** @brief overloadable stop method */
-		virtual void stop() { /* no-op */ }
+		/** @brief pure virtual stop method */
+		virtual void stop() = 0;
 	};
 	
 	/** @brief abstract base class for track types */
@@ -59,21 +59,18 @@ namespace itp { namespace multitrack {
 		
 	protected:
 		
-		double			mOffset; //!< track's offset from parent start-time (in seconds)
 		Track::WeakRef	mParent; //!< track's parent
 		Timer::Ref		mTimer;  //!< sequence timer
 		
 		/** @brief default constructor */
 		Track(Timer::Ref iTimer) :
-		mTimer( iTimer ),
-		mOffset( 0.0 )
+		mTimer( iTimer )
 		{ /* no-op */ }
 		
 		/** @brief parented constructor */
 		Track(Track::Ref iParent) :
 		mParent( Track::WeakRef( iParent ) ),
-		mTimer( iParent->getTimer() ),
-		mOffset( 0.0 )
+		mTimer( iParent->getTimer() )
 		{ /* no-op */ }
 		
 	public:
@@ -114,47 +111,11 @@ namespace itp { namespace multitrack {
 			return mParent.lock();
 		}
 		
-		/** @brief sets track's local offset (in seconds) */
-		void setLocalOffset(double iOffset)
-		{
-			mOffset = iOffset;
-		}
-		
-		/** @brief sets track's local offset to current time (in seconds) */
-		void setLocalOffsetToCurrent()
-		{
-			mOffset = mTimer->getPlayhead();
-		}
+		/** @brief pure virtual play-mode method */
+		virtual void gotoPlayMode() = 0;
 
-		/** @brief returns track's local offset (in seconds) */
-		double getLocalOffset() const
-		{
-			return mOffset;
-		}
-		
-		/** @brief returns track's parent's global offset (in seconds) */
-		double getParentOffset() const
-		{
-			return ( hasParent() ? getParent()->getOffset() : 0.0 );
-		}
-		
-		/** @brief returns track's global offset (in seconds) */
-		double getOffset() const
-		{
-			return getParentOffset() + getLocalOffset();
-		}
-		
-		/** @brief overloadable idle-mode method */
-		virtual void gotoIdleMode()
-		{
-			/* no-op */
-		}
-		
-		/** @brief overloadable play-mode method */
-		virtual void gotoPlayMode()
-		{
-			/* no-op */
-		}
+		/** @brief pure virtual frame-count getter method */
+		virtual size_t getFrameCount() const = 0;
 	};
 
 } } // namespace itp::multitrack

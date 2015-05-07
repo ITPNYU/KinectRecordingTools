@@ -110,7 +110,7 @@ namespace itp { namespace multitrack {
 		typedef std::function<T(void)>				RecorderCallback;
 		typedef std::function<void(const T&)>		PlayerCallback;
 
-		/** @brief track player */
+		/** @brief track player mediator */
 		class Player : public TrackBase {
 		public:
 
@@ -127,17 +127,19 @@ namespace itp { namespace multitrack {
 			typename TrackT::Ref	mTrack;
 			FrameInfoVec			mInfoVec;
 			FrameInfoIter			mInfoIterator;
-			PlayerCallback			mPlayerCallback;
+			PlayerCallback			mPlayerCb;
 			double					mKeyTimeCurr;
 			double					mKeyTimeNext;
+			bool					mInitialized;
 			
+			/** @brief basic constructor */
 			Player(typename TrackT::Ref iTrack, PlayerCallback iPlayerCallback) :
 				mTrack( iTrack ),
-				mPlayerCallback( iPlayerCallback ),
+				mPlayerCb( iPlayerCallback ),
 				mInfoVec( FrameInfoVec() ),
-				mInfoIterator( mInfoVec.end() ),
 				mKeyTimeCurr( 0.0 ),
-				mKeyTimeNext( 0.0 )
+				mKeyTimeNext( 0.0 ),
+				mInitialized( false )
 			{
 				/* no-op */
 			}
@@ -150,62 +152,67 @@ namespace itp { namespace multitrack {
 				return Player::Ref(new Player(std::forward<Args>(args)...));
 			}
 
+			/** @brief update method */
 			void update()
 			{
 				// Handle empty track:
-				if( mInfoVec.empty() ) {
-					mInfoIterator = mInfoVec.end();
+				if (mInfoVec.empty()) {
+					mInitialized = false;
 					return;
 				}
-				// Compute local playhead:
-				double tLocalPlayhead = mTrack->getTimer()->getPlayhead() - mTrack->getOffset();
-				// Get duration:
-				double tDuration = mInfoVec.back().first;
+				// Get track endpoints:
+				double tBegin    = mInfoVec.front().first;
+				double tEnd      = mInfoVec.back().first;
+				// Get playhead:
+				const double& tPlayhead = mTrack->getTimer()->getPlayhead();
 				// Handle playhead out-of-range:
-				if( tLocalPlayhead < 0.0 || tLocalPlayhead > tDuration ) {
-					mInfoIterator = mInfoVec.end();
+				if (tPlayhead < tBegin || tPlayhead > tEnd) {
+					mInitialized = false;
 					return;
 				}
 				// Activate, if necessary:
-				if( mInfoIterator == mInfoVec.end() ) {
+				if (!mInitialized) {
+					mInitialized = true;
 					mInfoIterator = mInfoVec.begin();
-					mKeyTimeCurr  = mInfoVec.front().first;
-					mKeyTimeNext  = ( ( mInfoVec.size() > 1 ) ? ( mInfoIterator + 1 )->first : mKeyTimeCurr );
+					mKeyTimeCurr = mInfoVec.front().first;
+					mKeyTimeNext = ((mInfoVec.size() > 1) ? (mInfoIterator + 1)->first : mKeyTimeCurr);
 				}
 				// Update iterator:
-				while( tLocalPlayhead >= mKeyTimeNext && mInfoIterator != mInfoVec.end() ) {
+				while (tPlayhead >= mKeyTimeNext && mInfoIterator != mInfoVec.end()) {
 					mKeyTimeCurr = mInfoIterator->first;
-					mKeyTimeNext = ( ( ++mInfoIterator == mInfoVec.end() ) ? mKeyTimeCurr : mInfoIterator->first );
+					mKeyTimeNext = ((++mInfoIterator == mInfoVec.end()) ? mKeyTimeCurr : mInfoIterator->first);
 				}
 			}
 
+			/** @brief draw method */
 			void draw()
 			{
-				if( !mPlayerCallback || mInfoIterator == mInfoVec.end() ) return;
-				mPlayerCallback( read_from_file<T>( mTrack->getDirectory() / mInfoIterator->second ) );
+				if (!mPlayerCb || !mInitialized) return;
+				mPlayerCb(read_from_file<T>(mTrack->getDirectory() / mInfoIterator->second));
 			}
-			
+
+			/** @brief start method */
 			void start()
 			{
 				// Clear info container:
 				mInfoVec.clear();
-				mInfoIterator = mInfoVec.end();
+				mInitialized = false;
 				// Try to open info file:
-				std::ifstream tInfoFile( mTrack->getInfoPath().string() );
+				std::ifstream tInfoFile(mTrack->getInfoPath().string());
 				// Handle info file:
-				if( tInfoFile.is_open() ) {
+				if (tInfoFile.is_open()) {
 					std::string tTemp;
 					// Iterate over each line in info file:
-					while( std::getline( tInfoFile, tTemp ) ) {
+					while (std::getline(tInfoFile, tTemp)) {
 						// Find delimiter:
-						std::size_t tFind = tTemp.find_first_of( ' ' );
+						std::size_t tFind = tTemp.find_first_of(' ');
 						// Handle frame:
-						if( tFind != std::string::npos ) {
-							mInfoVec.push_back( FrameInfo( atof( tTemp.substr( 0, tFind ).c_str() ), tTemp.substr( tFind + 1 ) ) );
+						if (tFind != std::string::npos) {
+							mInfoVec.push_back(FrameInfo(atof(tTemp.substr(0, tFind).c_str()), tTemp.substr(tFind + 1)));
 						}
 						// Handle error:
 						else {
-							throw std::runtime_error( "Player could not read file: \'" + mTrack->getInfoPath().string() + "\'" );
+							throw std::runtime_error("Player could not read file: \'" + mTrack->getInfoPath().string() + "\'");
 						}
 					}
 					// Close info file:
@@ -213,12 +220,18 @@ namespace itp { namespace multitrack {
 				}
 				// Handle file-open error:
 				else {
-					throw std::runtime_error( "Player could not open file: \'" + mTrack->getInfoPath().string() + "\'" );
+					throw std::runtime_error("Player could not open file: \'" + mTrack->getInfoPath().string() + "\'");
 				}
+			}
+
+			/** @brief stop method */
+			void stop()
+			{ 
+				/* no-op */
 			}
 		};
 
-		/** @brief track recorder */
+		/** @brief track recorder mediator */
 		class Recorder : public TrackBase {
 		public:
 
@@ -226,24 +239,20 @@ namespace itp { namespace multitrack {
 
 		private:
 
-			typename TrackT::Ref	mTrack;
-			T						mBuffer;
-			
-			RecorderCallback		mRecorderCallback;
-			PlayerCallback			mPlayerCallback;
-			
-			double					mStart;  //!< local start time (in seconds)
-			bool					mActive;
-			size_t					mFrameCount;
-			std::ofstream			mInfoFile;
+			typename TrackT::Ref	mTrack;			//!< mediator's owner
+			T						mBuffer;		//!< current frame
+
+			RecorderCallback		mRecorderCb;	//!< recorder callback function
+			PlayerCallback			mPlayerCb;		//!< player callback function
+
+			bool					mActive;		//!< flags whether recorder is active
+			std::ofstream			mInfoFile;		//!< info-file output stream
 
 			Recorder(typename TrackT::Ref iTrack, RecorderCallback iRecorderCallback, PlayerCallback iPlayerCallback) :
 				mTrack(iTrack),
-				mRecorderCallback(iRecorderCallback),
-				mPlayerCallback(iPlayerCallback),
-				mStart(0.0),
-				mActive(false),
-				mFrameCount(0)
+				mRecorderCb(iRecorderCallback),
+				mPlayerCb(iPlayerCallback),
+				mActive(false)
 			{ 
 				/* no-op */
 			}
@@ -263,44 +272,69 @@ namespace itp { namespace multitrack {
 
 			RecorderCallback getRecorderCallbackFn() const
 			{
-				return mRecorderCallback;
+				return mRecorderCb;
 			}
 
 			PlayerCallback getPlayerCallbackFn() const
 			{
-				return mPlayerCallback;
+				return mPlayerCb;
 			}
 
+			const bool& isActive() const
+			{
+				return mActive;
+			}
+
+			/** @brief update method */
 			void update()
 			{
-				if (!mActive || !mRecorderCallback) return;
-				// Get current time:
-				double tNow = ci::app::getElapsedSeconds() - mStart;
+				if ( !mRecorderCb ) return;
 				// Get current frame:
-				T tCurr = mRecorderCallback();
+				T tCurr = mRecorderCb();
 				// Check frame validity:
 				if( tCurr ) {
 					// Set buffer:
 					mBuffer = tCurr;
-					// Compose frame filename:
-					std::string tFilename = ("frame_" + std::to_string(mFrameCount) + "." + get_file_extension<T>());
-					// Write frame to info file:
-					mInfoFile << tNow << ' ' << tFilename << std::endl;
-					// Write frame contents to file:
-					write_to_file<T>( mTrack->getDirectory() / tFilename, mBuffer );
-					// Increment frame count:
-					mFrameCount++;
+					// Handle active mode:
+					if (mActive) {
+						// Compose frame filename:
+						std::string tFilename = ("frame_" + std::to_string(mTrack->mFrameCount) + "." + get_file_extension<T>());
+						// Write frame to info file:
+						mInfoFile << mTrack->getTimer()->getPlayhead() << ' ' << tFilename << std::endl;
+						// Write frame contents to file:
+						write_to_file<T>(mTrack->getDirectory() / tFilename, mBuffer);
+						// Increment frame count:
+						mTrack->mFrameCount++;
+					}
 				}
 			}
 
+			/** @brief draw method */
 			void draw()
 			{
-				if( !mActive || !mPlayerCallback ) return;
-				mPlayerCallback( mBuffer );
+				if( !mPlayerCb ) return;
+				mPlayerCb( mBuffer );
 			}
 
+			/** @brief start method */
 			void start()
 			{
+				start_info_file();
+				mActive = true;
+				mTrack->mFrameCount = 0;
+			}
+
+			/** @brief stop method */
+			void stop()
+			{
+				stop_info_file();
+				mActive = false;
+			}
+			
+			void start_info_file()
+			{
+				// Stop previous, if applicable:
+				stop_info_file();
 				// Check if directory already exists:
 				if (ci::fs::exists(mTrack->getDirectory())) {
 					// If path exists but is not a directory, throw:
@@ -312,26 +346,9 @@ namespace itp { namespace multitrack {
 				else if (!boost::filesystem::create_directory(mTrack->getDirectory())) {
 					throw std::runtime_error("Could not create \'" + mTrack->getDirectory().string() + "\' as a directory");
 				}
-				// Start info file:
-				start_info_file();
-				// Start recording:
-				mActive = true;
-				mFrameCount = 0;
-				mTrack->setLocalOffsetToCurrent();
-				mStart = ci::app::getElapsedSeconds();
-			}
-
-			void stop()
-			{
-				stop_info_file();
-				mActive = false;
-			}
-			
-			void start_info_file()
-			{
-				stop_info_file();
+				// Try to open info file:
 				mInfoFile.open( mTrack->getInfoPath().string() );
-				
+				// Handle info file not found error:
 				if( ! mInfoFile.is_open() )
 					throw std::runtime_error( "Recorder could not open file: \'" + mTrack->getInfoPath().string() + "\'" );
 			}
@@ -346,17 +363,18 @@ namespace itp { namespace multitrack {
 		
 	private:
 
-		TrackBase::Ref	mMediator;	//!< shared_ptr to track mediator
-		ci::fs::path	mDirectory;	//!< track's base directory
-		std::string		mName;		//!< track's base filename
+		TrackBase::Ref	mMediator;		//!< shared_ptr to track mediator
+		ci::fs::path	mDirectory;		//!< track's base directory
+		std::string		mName;			//!< track's base filename
+		size_t			mFrameCount;	//!< number of frames recorded
 		
 		/** @brief default constructor */
 		TrackT(const ci::fs::path& iDirectory, const std::string& iName, Timer::Ref iTimer)
-		: Track( iTimer ), mDirectory( iDirectory ), mName( iName ) { /* no-op */ }
+			: Track(iTimer), mDirectory(iDirectory), mName(iName), mFrameCount(0) { /* no-op */ }
 		
 		/** @brief parented constructor */
 		TrackT(const ci::fs::path& iDirectory, const std::string& iName, Track::Ref iParent)
-		: Track( iParent ), mDirectory( iDirectory ), mName( iName ) { /* no-op */ }
+			: Track(iParent), mDirectory(iDirectory), mName(iName), mFrameCount(0) { /* no-op */ }
 		
 	public:
 		
@@ -371,15 +389,9 @@ namespace itp { namespace multitrack {
 		
 		void update() { if( mMediator ) mMediator->update(); }
 		void draw() { if( mMediator ) mMediator->draw(); }
-		void start() { if( mMediator ) mMediator->start(); }
+		void start() { if (mMediator) mMediator->start(); }
 		void stop() { if( mMediator ) mMediator->stop(); }
-		
-		void gotoIdleMode()
-		{
-			if( mMediator ) mMediator->stop();
-			mMediator.reset();
-		}
-		
+
 		void gotoPlayMode()
 		{
 			// Stop mediator:
@@ -388,15 +400,22 @@ namespace itp { namespace multitrack {
 			typename Recorder::Ref tRecorderCast = std::dynamic_pointer_cast<Recorder>(mMediator);
 			// Return on cast error:
 			if (!tRecorderCast) { return; }
+			// Create player mediator:
 			mMediator = Player::create(getRef<TrackT>(), tRecorderCast->getPlayerCallbackFn());
-			mMediator->start();
 		}
-		
+
 		void gotoRecordMode(RecorderCallback iRecorderCallback, PlayerCallback iPlayerCallback)
 		{
+			// Stop mediator:
 			if( mMediator ) mMediator->stop();
+			// Create recorder mediator:
 			mMediator = Recorder::create(getRef<TrackT>(), iRecorderCallback, iPlayerCallback);
-			mMediator->start();
+		}
+
+		/** @brief returns the track's frame-count */
+		size_t getFrameCount() const
+		{
+			return mFrameCount;
 		}
 	};
 

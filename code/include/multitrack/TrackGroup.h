@@ -31,55 +31,79 @@ namespace itp { namespace multitrack {
 			return TrackGroup::Ref( new TrackGroup( std::forward<Args>( args )... ) );
 		}
 		
+		/** @brief update method */
 		void update()
 		{
-			// Update tracks:
 			for( auto &tTrack : mTracks ) {
 				tTrack->update();
 			}
 		}
 		
+		/** @brief draw method */
 		void draw()
 		{
-			// Draw tracks:
+			ci::gl::color(1.0, 1.0, 1.0, 1.0);
 			for( auto &tTrack : mTracks ) {
-				ci::gl::color( 1.0, 1.0, 1.0, 0.5 ); // TODO
 				tTrack->draw();
 			}
-			// Draw info:
-			std::stringstream ss;
-			ss << "TIME: " << mTimer->getPlayhead();
-			ci::gl::drawString( ss.str(), ci::vec2( 25.0 ), ci::Color::white() );
+		}
+
+		/** @brief start method */
+		void start()
+		{
+			for (auto &tTrack : mTracks) {
+				tTrack->start();
+			}
+		}
+
+		/** @brief stop method */
+		void stop()
+		{
+			for (auto &tTrack : mTracks) {
+				tTrack->stop();
+			}
 		}
 		
 		void removeTrack(Track::Ref iTrack)
 		{
 			for(Track::RefDeque::iterator it = mTracks.begin(); it != mTracks.end(); it++) {
 				if( iTrack.get() == (*it).get() ) {
+					(*it)->stop();
 					mTracks.erase( it );
 					return;
 				}
 			}
 		}
 		
-		void addTrack(Track::Ref iTrack)
-		{
-			mTracks.push_back( iTrack );
-		}
-		
-		template <typename T> Track::Ref addTrackRecorder(const ci::fs::path& iDirectory,
-														  const std::string& iName,
-														  std::function<T(void)> iRecorderCallbackFn,
-														  std::function<void(const T&)> iPlayerCallbackFn)
+		template <typename T> 
+		Track::Ref addTrack(const ci::fs::path& dir, const std::string& name, std::function<T(void)> recorderCb, std::function<void(const T&)> playerCb)
 		{
 			// Create typed track:
-			typename TrackT<T>::Ref tTrack = TrackT<T>::create( iDirectory, iName, getRef<TrackGroup>() );
+			typename TrackT<T>::Ref tTrack = TrackT<T>::create(dir, name, getRef<TrackGroup>());
 			// Add track to controller:
-			addTrack( tTrack );
-			// Start recorder:
-			tTrack->gotoRecordMode(iRecorderCallbackFn, iPlayerCallbackFn);
+			mTracks.push_back(tTrack);
+			// Initialize recorder:
+			tTrack->gotoRecordMode(recorderCb, playerCb);
 			// Return track:
 			return tTrack;
+		}
+
+		/** @brief  play-mode method */
+		void gotoPlayMode()
+		{
+			for (auto &tTrack : mTracks) {
+				tTrack->gotoPlayMode();
+			}
+		}
+
+		/** @brief returns the track group's frame-count */
+		size_t getFrameCount() const
+		{
+			size_t tCount = 0;
+			for (const auto &tTrack : mTracks) {
+				tCount = std::max(tCount, tTrack->getFrameCount());
+			}
+			return tCount;
 		}
 	};
 
