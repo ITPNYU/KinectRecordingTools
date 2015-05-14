@@ -17,10 +17,14 @@ using namespace ci;
 using namespace ci::app;
 using namespace std;
 
-#define RAW_FRAME_WIDTH  960
-#define RAW_FRAME_HEIGHT 540
+static const size_t kRawFrameWidth = 960;
+static const size_t kRawFrameHeight = 540;
+
+static const size_t kBodyPointCount = 25;
 
 static const double kRecognitionThreshold  = 0.85;
+static const size_t kRecognitionSamples    = 30;
+static const size_t kRecognitionSamplesMin = 25;
 
 enum AppState
 {
@@ -29,22 +33,11 @@ enum AppState
 	WAIT_FOR_SINGLE_USER,
 	ESTABLISH_IDLE_POSE,
 	ESTABLISH_CONTROL_POSE,
-	BEGIN_RECORDING,
-	RECORDING_TRACK
+	ESTABLISH_ACTOR_POSE,
+	BEGIN_GENERAL,
+	BEGIN_ACTOR,
+	RECORD_ACTOR
 };
-
-struct GestureHolder
-{
-	AppState	m_targ;
-	size_t		m_pos;
-	size_t		m_neg;
-
-	GestureHolder(AppState targ = AppState::NONE)
-		: m_targ(targ), m_pos(0), m_neg(0) { /* no-op */ }
-
-	// TODO UNUSED WORK IN PROGRESS !
-};
-
 
 class HelloKinectMultitrackGestureApp : public App {
 public:
@@ -64,6 +57,7 @@ public:
 	void addTrack();
 
 	bool addGestureTemplate(const std::string& poseName);
+	bool analyzeGesture(std::string* recognizedGesture);
 
 	void renderSilhouetteGpu();
 
@@ -103,8 +97,10 @@ public:
 
 	bool								mEstablishedPoseIdle;
 	bool								mEstablishedPoseControl;
+	bool								mEstablishedPoseActor;
 
 	foil::gesture::Recognizer			mRecognizer;
+	foil::gesture::Result::Deque		mRecognizerBuffer;
 };
 
 void HelloKinectMultitrackGestureApp::setup()
@@ -158,7 +154,7 @@ void HelloKinectMultitrackGestureApp::setup()
 	});
 	// Setup FBO:
 	ci::gl::Fbo::Format tSilhouetteFboFormat;
-	mSilhouetteFbo = ci::gl::Fbo::create(RAW_FRAME_WIDTH, RAW_FRAME_HEIGHT, tSilhouetteFboFormat.colorTexture());
+	mSilhouetteFbo = ci::gl::Fbo::create(kRawFrameWidth, kRawFrameHeight, tSilhouetteFboFormat.colorTexture());
 	// Setup multitrack controller:
 	mMultitrackController = itp::multitrack::Controller::create(getHomeDirectory() / "Desktop" / "Tests");
 	mMultitrackController->start();
@@ -174,6 +170,7 @@ void HelloKinectMultitrackGestureApp::setup()
 	mInStateTransition = false;
 	mEstablishedPoseIdle = false;
 	mEstablishedPoseControl = false;
+	mEstablishedPoseActor = false;
 	// Add initial track:
 	addTrack();
 }
@@ -221,23 +218,23 @@ void HelloKinectMultitrackGestureApp::update()
 			else if (!mEstablishedPoseControl) {
 				transitionToState(AppState::ESTABLISH_CONTROL_POSE, mStateTransitionLong, "Establishing CONTROL POSE in ");
 			}
+			else if (!mEstablishedPoseActor) {
+				transitionToState(AppState::ESTABLISH_ACTOR_POSE, mStateTransitionLong, "Establishing ACTOR POSE in ");
+			}
 			else {
-				// Check whether recognizer has templates:
-				if (mRecognizer.hasTemplates()) {
-					// Get point cloud:
-					itp::multitrack::PointCloud tCloud = itp::multitrack::PointCloud(mBodyFrame, mDevice);
-					// Check for correct point count for single body:
-					if (tCloud.mPoints.size() == 25) {
-						// Get gesture guess:
-						foil::gesture::Result tResult = mRecognizer.recognizeBest({ tCloud.mPoints });
-						// Check for control gesture:
-						if (tResult.mName == "CONTROL" && tResult.mScore >= kRecognitionThreshold) {
-							transitionToState(AppState::BEGIN_RECORDING, mStateTransitionLong, "Recording performance in ");
-						}
-						else {
-							mInfoLabel = "Best guess: " + tResult.mName + " " + std::to_string(tResult.mScore);
-						}
+				// Analyze gesture:
+				std::string recognizedGesture;
+				if (analyzeGesture(&recognizedGesture)) {
+					// Check for control gesture:
+					if (recognizedGesture == "CONTROL") {
+						transitionToState(AppState::BEGIN_GENERAL, mStateTransitionMedium, "You're on in ");
 					}
+					else {
+						mInfoLabel = "Best guess: " + recognizedGesture;
+					}
+				}
+				else {
+					mInfoLabel = "Now what?";
 				}
 			}
 		}
@@ -253,28 +250,44 @@ void HelloKinectMultitrackGestureApp::update()
 			}
 			transitionToState(AppState::IDLE, mStateTransitionShort, "Thanks! We'll be back in ");
 		}
-		else if (mAppState == AppState::BEGIN_RECORDING) {
+		else if (mAppState == AppState::ESTABLISH_ACTOR_POSE) {
+			if (addGestureTemplate("ACTOR")) {
+				mEstablishedPoseActor = true;
+			}
+			transitionToState(AppState::IDLE, mStateTransitionShort, "Thanks! We'll be back in ");
+		}
+		else if (mAppState == AppState::BEGIN_GENERAL) {
+			// Analyze gesture:
+			std::string recognizedGesture;
+			if (analyzeGesture(&recognizedGesture)) {
+				// Check for control gesture:
+				if (recognizedGesture == "ACTOR") {
+					transitionToState(AppState::BEGIN_ACTOR, mStateTransitionLong, "Recording performance in ");
+				}
+				else {
+					mInfoLabel = "Best guess: " + recognizedGesture;
+				}
+			}
+			else {
+				mInfoLabel = "What role would you like to play?";
+			}
+		}
+		else if (mAppState == AppState::BEGIN_ACTOR) {
 			mMultitrackController->start();
-			mAppState = AppState::RECORDING_TRACK;
+			mAppState = AppState::RECORD_ACTOR;
 			mInfoLabel = "";
 		}
-		else if (mAppState == AppState::RECORDING_TRACK) {
-			// Check whether recognizer has templates:
-			if (mRecognizer.hasTemplates()) {
-				// Get point cloud:
-				itp::multitrack::PointCloud tCloud = itp::multitrack::PointCloud(mBodyFrame, mDevice);
-				// Check for correct point count for single body:
-				if (tCloud.mPoints.size() == 25) {
-					// Get gesture guess:
-					foil::gesture::Result tResult = mRecognizer.recognizeBest({ tCloud.mPoints });
-					// Check for control gesture:
-					if (tResult.mName == "CONTROL" && tResult.mScore >= kRecognitionThreshold) {
-						// Complete track:
-						mMultitrackController->completeRecorder();
-						// Setup next preview track and return to idle state:
-						addTrack();
-						transitionToState(AppState::IDLE, mStateTransitionShort, "Thanks! We'll be back in ");
-					}
+		else if (mAppState == AppState::RECORD_ACTOR) {
+			// Analyze gesture:
+			std::string recognizedGesture;
+			if (analyzeGesture(&recognizedGesture)) {
+				// Check for control gesture:
+				if (recognizedGesture == "CONTROL") {
+					// Complete track:
+					mMultitrackController->completeRecorder();
+					// Setup next preview track and return to idle state:
+					addTrack();
+					transitionToState(AppState::IDLE, mStateTransitionShort, "Thanks! We'll be back in ");
 				}
 			}
 		}
@@ -295,7 +308,7 @@ void HelloKinectMultitrackGestureApp::draw()
 	if (!mInfoLabel.empty())
 		gl::drawStringCentered(mInfoLabel, vec2(getWindowWidth() * 0.5f, getWindowHeight() - 100.0f), Color(1, 1, 1), mFont);
 	// Draw time:
-	if (mAppState == AppState::RECORDING_TRACK)
+	if (mAppState == AppState::RECORD_ACTOR)
 		gl::drawString(std::to_string(mMultitrackController->getTimer()->getPlayhead()), vec2(25, 25), Color(1, 1, 1), mFont);
 }
 
@@ -383,9 +396,65 @@ bool HelloKinectMultitrackGestureApp::addGestureTemplate(const std::string& pose
 	// Get point cloud:
 	itp::multitrack::PointCloud tCloud = itp::multitrack::PointCloud(mBodyFrame, mDevice);
 	// Check for correct point count for single body:
-	if (tCloud.mPoints.size() == 25) {
+	if (tCloud.mPoints.size() == kBodyPointCount) {
 		mRecognizer.addTemplate(poseName, { tCloud.mPoints });
 		return true;
+	}
+	return false;
+}
+
+bool HelloKinectMultitrackGestureApp::analyzeGesture(std::string* recognizedGesture)
+{
+	// Check whether recognizer has templates:
+	if (mRecognizer.hasTemplates()) {
+		// Get point cloud:
+		itp::multitrack::PointCloud tCloud = itp::multitrack::PointCloud(mBodyFrame, mDevice);
+		// Check for correct point count for single body:
+		if (tCloud.mPoints.size() == kBodyPointCount) {
+			// Get gesture guess:
+			foil::gesture::Result tResult = mRecognizer.recognizeBest({ tCloud.mPoints });
+			// Check whether sample count has been reached:
+			if (mRecognizerBuffer.size() == kRecognitionSamples) {
+				mRecognizerBuffer.pop_front();
+				mRecognizerBuffer.push_back(tResult);
+				// Compute histogram (TODO optimize):
+				std::map< std::string, std::pair<size_t, float> > histo;
+				for (const auto& item : mRecognizerBuffer) {
+					std::map< std::string, std::pair<size_t, float> >::iterator findIt = histo.find( item.mName );
+					if (findIt == histo.end()) {
+						histo[item.mName] = std::pair<size_t, float>(1, item.mScore);
+					}
+					else {
+						(*findIt).second.first++;
+						(*findIt).second.second += item.mScore;
+					}
+				}
+				size_t bestCount = 0;
+				std::map< std::string, std::pair<size_t, float> >::const_iterator bestIt = histo.cend();
+				for (std::map< std::string, std::pair<size_t, float> >::const_iterator it = histo.cbegin(); it != histo.cend(); it++) {
+					if ( (*it).second.first > bestCount ) {
+						bestCount = (*it).second.first;
+						bestIt = it;
+					}
+				}
+				// Check recognition match criteria:
+				if (bestCount >= kRecognitionSamplesMin && bestIt != histo.cend()) {
+					float score = (*bestIt).second.second / static_cast<float>(bestCount);
+					if (score >= kRecognitionThreshold) {
+						// Set the output recognition label:
+						*recognizedGesture = (*bestIt).first;
+						// Clear the buffer for next process:
+						mRecognizerBuffer.clear();
+						// Return recognition success:
+						return true;
+					}
+				}
+			}
+			// Otherwise, just add new result:
+			else {
+				mRecognizerBuffer.push_back(tResult);
+			}
+		}
 	}
 	return false;
 }
