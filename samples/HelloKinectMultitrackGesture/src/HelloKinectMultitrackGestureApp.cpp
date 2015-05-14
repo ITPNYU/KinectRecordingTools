@@ -17,8 +17,8 @@ using namespace ci;
 using namespace ci::app;
 using namespace std;
 
-#define RAW_FRAME_WIDTH  1920
-#define RAW_FRAME_HEIGHT 1080
+#define RAW_FRAME_WIDTH  960
+#define RAW_FRAME_HEIGHT 540
 
 static const double kRecognitionThreshold  = 0.85;
 
@@ -64,7 +64,8 @@ public:
 	void addTrack();
 
 	bool addGestureTemplate(const std::string& poseName);
-	void renderSilhouette();
+
+	void renderSilhouetteGpu();
 
 	long long							mTimeStamp;
 	long long							mTimeStampPrev;
@@ -83,9 +84,7 @@ public:
 
 	ci::gl::TextureRef					mTextureBody;
 	ci::gl::TextureRef					mTextureColor;
-	ci::gl::TextureRef					mTextureDepth;
 	ci::gl::TextureRef					mTextureLookup;
-
 	ci::gl::FboRef						mSilhouetteFbo;
 
 	itp::multitrack::Controller::Ref	mMultitrackController;
@@ -344,7 +343,7 @@ void HelloKinectMultitrackGestureApp::addTrack()
 	// Create image recorder callback lambda:
 	auto tImgRecorderCallbackFn = [&](void) -> ci::SurfaceRef
 	{
-		renderSilhouette();
+		renderSilhouetteGpu();
 		return std::make_shared<Surface8u>(mSilhouetteFbo->readPixels8u(mSilhouetteFbo->getBounds()));
 	};
 	// Create image player callback lambda:
@@ -391,7 +390,7 @@ bool HelloKinectMultitrackGestureApp::addGestureTemplate(const std::string& pose
 	return false;
 }
 
-void HelloKinectMultitrackGestureApp::renderSilhouette()
+void HelloKinectMultitrackGestureApp::renderSilhouetteGpu()
 {
 	gl::ScopedFramebuffer fbScp(mSilhouetteFbo);
 	gl::clear(ColorA(0, 0, 0, 0));
@@ -409,15 +408,6 @@ void HelloKinectMultitrackGestureApp::renderSilhouette()
 		}
 		// Bind color texture:
 		mTextureColor->bind(0);
-		// Generate depth texture:
-		if (mTextureDepth) {
-			mTextureDepth->update(*(Kinect2::channel16To8(mChannelDepth).get()));
-		}
-		else {
-			mTextureDepth = ci::gl::Texture::create(*(Kinect2::channel16To8(mChannelDepth).get()));
-		}
-		// Bind depth texture:
-		mTextureDepth->bind(1);
 		// Generate lookup texture:
 		if (mTextureLookup) {
 			mTextureLookup->update(*(mSurfaceLookup.get()));
@@ -426,7 +416,7 @@ void HelloKinectMultitrackGestureApp::renderSilhouette()
 			mTextureLookup = ci::gl::Texture::create(*(mSurfaceLookup.get()), ci::gl::Texture::Format().dataType(GL_FLOAT));
 		}
 		// Bind lookup texture:
-		mTextureLookup->bind(2);
+		mTextureLookup->bind(1);
 		// Generate body-index texture:
 		if (mTextureBody) {
 			mTextureBody->update(*(mChannelBody.get()));
@@ -435,7 +425,7 @@ void HelloKinectMultitrackGestureApp::renderSilhouette()
 			mTextureBody = ci::gl::Texture::create(*(mChannelBody.get()));
 		}
 		// Bind body-index texture:
-		mTextureBody->bind(3);
+		mTextureBody->bind(2);
 		// Bind shader and draw:
 		{
 			// Bind shader:
@@ -443,8 +433,8 @@ void HelloKinectMultitrackGestureApp::renderSilhouette()
 			// Bind uniforms:
 			ci::gl::setDefaultShaderVars();
 			mGlslProg->uniform("uTextureColor", 0);
-			mGlslProg->uniform("uTextureLookup", 2);
-			mGlslProg->uniform("uTextureBody", 3);
+			mGlslProg->uniform("uTextureLookup", 1);
+			mGlslProg->uniform("uTextureBody", 2);
 			mGlslProg->uniform("uSilhouette", false);
 			// Set color:
 			ci::gl::color(1.0, 1.0, 1.0, 1.0);
@@ -453,7 +443,6 @@ void HelloKinectMultitrackGestureApp::renderSilhouette()
 		}
 		// Unbind textures:
 		mTextureColor->unbind();
-		mTextureDepth->unbind();
 		mTextureLookup->unbind();
 	}
 }
