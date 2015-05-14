@@ -26,6 +26,8 @@ static const double kRecognitionThreshold  = 0.85;
 static const size_t kRecognitionSamples    = 30;
 static const size_t kRecognitionSamplesMin = 25;
 
+static const double kSceneDurationSec = 60.0;
+
 enum AppState
 {
 	NONE,
@@ -34,7 +36,6 @@ enum AppState
 	ESTABLISH_IDLE_POSE,
 	ESTABLISH_CONTROL_POSE,
 	ESTABLISH_ACTOR_POSE,
-	BEGIN_GENERAL,
 	BEGIN_ACTOR,
 	RECORD_ACTOR
 };
@@ -227,10 +228,12 @@ void HelloKinectMultitrackGestureApp::update()
 				if (analyzeGesture(&recognizedGesture)) {
 					// Check for control gesture:
 					if (recognizedGesture == "CONTROL") {
-						transitionToState(AppState::BEGIN_GENERAL, mStateTransitionMedium, "You're on in ");
+						// TODO... clear all tracks and start a new sequence here?
+						//transitionToState(AppState::BEGIN_SOMETHING, mStateTransitionLong, "You're on in ");
 					}
-					else {
-						mInfoLabel = "Best guess: " + recognizedGesture;
+					// Check for actor gesture:
+					else if (recognizedGesture == "ACTOR") {
+						transitionToState(AppState::BEGIN_ACTOR, mStateTransitionLong, "You're on in ");
 					}
 				}
 				else {
@@ -256,38 +259,32 @@ void HelloKinectMultitrackGestureApp::update()
 			}
 			transitionToState(AppState::IDLE, mStateTransitionShort, "Thanks! We'll be back in ");
 		}
-		else if (mAppState == AppState::BEGIN_GENERAL) {
-			// Analyze gesture:
-			std::string recognizedGesture;
-			if (analyzeGesture(&recognizedGesture)) {
-				// Check for control gesture:
-				if (recognizedGesture == "ACTOR") {
-					transitionToState(AppState::BEGIN_ACTOR, mStateTransitionLong, "Recording performance in ");
-				}
-				else {
-					mInfoLabel = "Best guess: " + recognizedGesture;
-				}
-			}
-			else {
-				mInfoLabel = "What role would you like to play?";
-			}
-		}
 		else if (mAppState == AppState::BEGIN_ACTOR) {
 			mMultitrackController->start();
 			mAppState = AppState::RECORD_ACTOR;
 			mInfoLabel = "";
 		}
 		else if (mAppState == AppState::RECORD_ACTOR) {
+			// Check if maximum duration has been reached:
+			if (mMultitrackController->getTimer()->getPlayhead() >= kSceneDurationSec) {
+				// Complete track:
+				mMultitrackController->completeRecorder();
+				// Setup next preview track and return to idle state:
+				addTrack();
+				transitionToState(AppState::IDLE, mStateTransitionShort, "Cut! We'll be back in ");
+			}
 			// Analyze gesture:
-			std::string recognizedGesture;
-			if (analyzeGesture(&recognizedGesture)) {
-				// Check for control gesture:
-				if (recognizedGesture == "CONTROL") {
-					// Complete track:
-					mMultitrackController->completeRecorder();
-					// Setup next preview track and return to idle state:
-					addTrack();
-					transitionToState(AppState::IDLE, mStateTransitionShort, "Thanks! We'll be back in ");
+			else {
+				std::string recognizedGesture;
+				if (analyzeGesture(&recognizedGesture)) {
+					// Check for control gesture:
+					if (recognizedGesture == "CONTROL") {
+						// Complete track:
+						mMultitrackController->completeRecorder();
+						// Setup next preview track and return to idle state:
+						addTrack();
+						transitionToState(AppState::IDLE, mStateTransitionShort, "I see you're an actor and a director. We'll be back in ");
+					}
 				}
 			}
 		}
