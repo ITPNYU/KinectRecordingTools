@@ -141,7 +141,34 @@ namespace itp { namespace multitrack {
 				mKeyTimeNext( 0.0 ),
 				mInitialized( false )
 			{
-				/* no-op */
+				// Clear info container:
+				mInfoVec.clear();
+				mInitialized = false;
+				// Try to open info file:
+				std::ifstream tInfoFile(mTrack->getInfoPath().string());
+				// Handle info file:
+				if (tInfoFile.is_open()) {
+					std::string tTemp;
+					// Iterate over each line in info file:
+					while (std::getline(tInfoFile, tTemp)) {
+						// Find delimiter:
+						std::size_t tFind = tTemp.find_first_of(' ');
+						// Handle frame:
+						if (tFind != std::string::npos) {
+							mInfoVec.push_back(FrameInfo(atof(tTemp.substr(0, tFind).c_str()), tTemp.substr(tFind + 1)));
+						}
+						// Handle error:
+						else {
+							throw std::runtime_error("Player could not read file: \'" + mTrack->getInfoPath().string() + "\'");
+						}
+					}
+					// Close info file:
+					tInfoFile.close();
+				}
+				// Handle file-open error:
+				else {
+					throw std::runtime_error("Player could not open file: \'" + mTrack->getInfoPath().string() + "\'");
+				}
 			}
 
 		public:
@@ -194,34 +221,7 @@ namespace itp { namespace multitrack {
 			/** @brief start method */
 			void start()
 			{
-				// Clear info container:
-				mInfoVec.clear();
-				mInitialized = false;
-				// Try to open info file:
-				std::ifstream tInfoFile(mTrack->getInfoPath().string());
-				// Handle info file:
-				if (tInfoFile.is_open()) {
-					std::string tTemp;
-					// Iterate over each line in info file:
-					while (std::getline(tInfoFile, tTemp)) {
-						// Find delimiter:
-						std::size_t tFind = tTemp.find_first_of(' ');
-						// Handle frame:
-						if (tFind != std::string::npos) {
-							mInfoVec.push_back(FrameInfo(atof(tTemp.substr(0, tFind).c_str()), tTemp.substr(tFind + 1)));
-						}
-						// Handle error:
-						else {
-							throw std::runtime_error("Player could not read file: \'" + mTrack->getInfoPath().string() + "\'");
-						}
-					}
-					// Close info file:
-					tInfoFile.close();
-				}
-				// Handle file-open error:
-				else {
-					throw std::runtime_error("Player could not open file: \'" + mTrack->getInfoPath().string() + "\'");
-				}
+				/* no-op */
 			}
 
 			/** @brief stop method */
