@@ -63,7 +63,14 @@ namespace itp { namespace multitrack {
 				tTrack->stop();
 			}
 		}
+
+		/** @brief removes all tracks from group */
+		void removeAllTracks()
+		{
+			mTracks.clear();
+		}
 		
+		/** @brief removes input track from group, if contained */
 		void removeTrack(Track::Ref iTrack)
 		{
 			for(Track::RefDeque::iterator it = mTracks.begin(); it != mTracks.end(); it++) {

@@ -59,6 +59,13 @@ namespace itp { namespace multitrack {
 			mSequence->stop();
 		}
 
+		void resetAll()
+		{
+			mTimer->reset();
+			mSequence->removeAllTracks();
+			mUidGenerator = 0;
+		}
+
 		void resetTimer()
 		{
 			mTimer->reset();

@@ -26,18 +26,28 @@ static const double kRecognitionThreshold  = 0.85;
 static const size_t kRecognitionSamples    = 30;
 static const size_t kRecognitionSamplesMin = 25;
 
-static const double kSceneDurationSec = 60.0;
+static const double kSceneDurationSec = 20.0;
 
 enum AppState
 {
 	NONE,
-	IDLE,
+	HOME,
+	CHOOSE_ACTIVITY,
 	WAIT_FOR_SINGLE_USER,
 	ESTABLISH_IDLE_POSE,
 	ESTABLISH_CONTROL_POSE,
 	ESTABLISH_ACTOR_POSE,
 	BEGIN_ACTOR,
 	RECORD_ACTOR
+};
+
+struct CaptionImage
+{
+	typedef std::deque<CaptionImage> Deque;
+
+	ci::gl::TextureRef	mTex;
+	std::string			mMsg;
+	ci::vec2			mDim;
 };
 
 class HelloKinectMultitrackGestureApp : public App {
@@ -49,6 +59,9 @@ public:
 
 	void mouseDown(MouseEvent event) override;
 	void keyUp(KeyEvent event) override;
+
+	void drawCaption(const CaptionImage& caption);
+	void drawCaptions(const CaptionImage::Deque& captions);
 
 	void transitionToState(AppState targetState, float transitionDuration, const std::string& updateMsg);
 	void startStateTransition();
@@ -100,9 +113,38 @@ public:
 	bool								mEstablishedPoseControl;
 	bool								mEstablishedPoseActor;
 
+	ci::gl::TextureRef					mTexturePoseIdle;
+	ci::gl::TextureRef					mTexturePoseControl;
+	ci::gl::TextureRef					mTexturePoseActor;
+
+	CaptionImage::Deque					mActiveCaptions;
+
 	foil::gesture::Recognizer			mRecognizer;
 	foil::gesture::Result::Deque		mRecognizerBuffer;
 };
+
+void HelloKinectMultitrackGestureApp::drawCaption(const CaptionImage& caption)
+{
+	Rectf rect = Rectf(vec2(0.0, 0.0), caption.mDim);
+	gl::color(1, 1, 1);
+	gl::drawSolidRect(rect);
+	gl::draw(caption.mTex, rect);
+	gl::drawString(caption.mMsg, vec2(caption.mDim.x + 20.0, caption.mDim.y * 0.5), Color(1, 1, 1), mFont);
+}
+
+void HelloKinectMultitrackGestureApp::drawCaptions(const CaptionImage::Deque& captions)
+{
+	float padding = 5.0; // TODO: externalize
+
+	vec2 offset(0.0, 0.0);
+	for (const auto& caption : captions) {
+		gl::pushMatrices();
+		gl::translate(offset);
+		drawCaption(caption);
+		gl::popMatrices();
+		offset.y += caption.mDim.y + padding;
+	}
+}
 
 void HelloKinectMultitrackGestureApp::setup()
 {
@@ -210,9 +252,9 @@ void HelloKinectMultitrackGestureApp::update()
 			mInfoLabel = "I see " + std::to_string(mActiveBodyCount) + " users, but need one.";
 		}
 		else if (mAppState == AppState::WAIT_FOR_SINGLE_USER) {
-			transitionToState(AppState::IDLE, mStateTransitionMedium, "Oh hello! We'll get started in ");
+			transitionToState(AppState::HOME, mStateTransitionMedium, "Oh hello! We'll get started in ");
 		}
-		else if (mAppState == AppState::IDLE) {
+		else if (mAppState == AppState::HOME) {
 			if (!mEstablishedPoseIdle) {
 				transitionToState(AppState::ESTABLISH_IDLE_POSE, mStateTransitionLong, "Establishing IDLE POSE in ");
 			}
@@ -223,41 +265,56 @@ void HelloKinectMultitrackGestureApp::update()
 				transitionToState(AppState::ESTABLISH_ACTOR_POSE, mStateTransitionLong, "Establishing ACTOR POSE in ");
 			}
 			else {
-				// Analyze gesture:
-				std::string recognizedGesture;
-				if (analyzeGesture(&recognizedGesture)) {
-					// Check for control gesture:
-					if (recognizedGesture == "CONTROL") {
-						// TODO... clear all tracks and start a new sequence here?
-						//transitionToState(AppState::BEGIN_SOMETHING, mStateTransitionLong, "You're on in ");
-					}
-					// Check for actor gesture:
-					else if (recognizedGesture == "ACTOR") {
-						transitionToState(AppState::BEGIN_ACTOR, mStateTransitionLong, "You're on in ");
-					}
+				mAppState = AppState::CHOOSE_ACTIVITY;
+				mInfoLabel = "What's next?";
+				mActiveCaptions = {
+					{ mTexturePoseControl, "Start a new movie", vec2(240, 135) },
+					{ mTexturePoseActor, "Add an actor", vec2(240, 135) }
+				};
+			}
+		}
+		else if (mAppState == AppState::CHOOSE_ACTIVITY) {
+			// Check if maximum duration has been reached:
+			if (mMultitrackController->getTimer()->getPlayhead() >= kSceneDurationSec) {
+				mMultitrackController->getTimer()->start();
+			}
+			// Analyze gesture:
+			std::string recognizedGesture;
+			if (analyzeGesture(&recognizedGesture)) {
+				// Check for control gesture:
+				if (recognizedGesture == "CONTROL") {
+					mMultitrackController->resetAll();
+					addTrack();
+					mActiveCaptions.clear();
+					transitionToState(AppState::HOME, mStateTransitionMedium, "Starting a new movie in ");
 				}
-				else {
-					mInfoLabel = "Now what?";
+				// Check for actor gesture:
+				else if (recognizedGesture == "ACTOR") {
+					mActiveCaptions.clear();
+					transitionToState(AppState::BEGIN_ACTOR, mStateTransitionLong, "You're on in ");
 				}
 			}
 		}
 		else if (mAppState == AppState::ESTABLISH_IDLE_POSE) {
 			if (addGestureTemplate("IDLE")) {
+				mTexturePoseIdle = ci::gl::Texture::create(mSilhouetteFbo->readPixels8u(mSilhouetteFbo->getBounds()));
 				mEstablishedPoseIdle = true;
 			}
-			transitionToState(AppState::IDLE, mStateTransitionShort, "Thanks! We'll be back in ");
+			transitionToState(AppState::HOME, mStateTransitionShort, "Thanks! We'll be back in ");
 		}
 		else if (mAppState == AppState::ESTABLISH_CONTROL_POSE) {
 			if (addGestureTemplate("CONTROL")) {
+				mTexturePoseControl = ci::gl::Texture::create(mSilhouetteFbo->readPixels8u(mSilhouetteFbo->getBounds()));
 				mEstablishedPoseControl = true;
 			}
-			transitionToState(AppState::IDLE, mStateTransitionShort, "Thanks! We'll be back in ");
+			transitionToState(AppState::HOME, mStateTransitionShort, "Thanks! We'll be back in ");
 		}
 		else if (mAppState == AppState::ESTABLISH_ACTOR_POSE) {
 			if (addGestureTemplate("ACTOR")) {
+				mTexturePoseActor = ci::gl::Texture::create(mSilhouetteFbo->readPixels8u(mSilhouetteFbo->getBounds()));
 				mEstablishedPoseActor = true;
 			}
-			transitionToState(AppState::IDLE, mStateTransitionShort, "Thanks! We'll be back in ");
+			transitionToState(AppState::HOME, mStateTransitionShort, "Thanks! We'll be back in ");
 		}
 		else if (mAppState == AppState::BEGIN_ACTOR) {
 			mMultitrackController->start();
@@ -269,9 +326,9 @@ void HelloKinectMultitrackGestureApp::update()
 			if (mMultitrackController->getTimer()->getPlayhead() >= kSceneDurationSec) {
 				// Complete track:
 				mMultitrackController->completeRecorder();
-				// Setup next preview track and return to idle state:
+				// Setup next preview track and return to home state:
 				addTrack();
-				transitionToState(AppState::IDLE, mStateTransitionShort, "Cut! We'll be back in ");
+				transitionToState(AppState::HOME, mStateTransitionShort, "Cut! We'll be back in ");
 			}
 			// Analyze gesture:
 			else {
@@ -281,9 +338,9 @@ void HelloKinectMultitrackGestureApp::update()
 					if (recognizedGesture == "CONTROL") {
 						// Complete track:
 						mMultitrackController->completeRecorder();
-						// Setup next preview track and return to idle state:
+						// Setup next preview track and return to home state:
 						addTrack();
-						transitionToState(AppState::IDLE, mStateTransitionShort, "I see you're an actor and a director. We'll be back in ");
+						transitionToState(AppState::HOME, mStateTransitionShort, "I see you're an actor and a director. We'll be back in ");
 					}
 				}
 			}
@@ -301,6 +358,10 @@ void HelloKinectMultitrackGestureApp::draw()
 	gl::enable(GL_TEXTURE_2D);
 	// Draw controller:
 	mMultitrackController->draw();
+	// Draw active captions:
+	if (!mActiveCaptions.empty()) {
+		drawCaptions(mActiveCaptions);
+	}
 	// Draw info:
 	if (!mInfoLabel.empty())
 		gl::drawStringCentered(mInfoLabel, vec2(getWindowWidth() * 0.5f, getWindowHeight() - 100.0f), Color(1, 1, 1), mFont);
