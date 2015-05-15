@@ -49,26 +49,18 @@ namespace itp { namespace multitrack {
 		
 		void start()
 		{
-			mTimer->start();
 			mSequence->start();
 		}
 		
 		void stop()
 		{
-			mTimer->stop();
 			mSequence->stop();
 		}
 
-		void resetAll()
+		void resetSequence()
 		{
-			mTimer->reset();
 			mSequence->removeAllTracks();
 			mUidGenerator = 0;
-		}
-
-		void resetTimer()
-		{
-			mTimer->reset();
 		}
 
 		Timer::Ref getTimer() const

@@ -200,7 +200,6 @@ void HelloKinectMultitrackGestureApp::setup()
 	mSilhouetteFbo = ci::gl::Fbo::create(kRawFrameWidth, kRawFrameHeight, tSilhouetteFboFormat.colorTexture());
 	// Setup multitrack controller:
 	mMultitrackController = itp::multitrack::Controller::create(getHomeDirectory() / "Desktop" / "Tests");
-	mMultitrackController->start();
 	// Set default state transition duration:
 	mStateTransitionShort  = 2.0f;
 	mStateTransitionMedium = 4.0f;
@@ -265,6 +264,7 @@ void HelloKinectMultitrackGestureApp::update()
 				transitionToState(AppState::ESTABLISH_ACTOR_POSE, mStateTransitionLong, "Establishing ACTOR POSE in ");
 			}
 			else {
+				mMultitrackController->getTimer()->start();
 				mAppState = AppState::CHOOSE_ACTIVITY;
 				mInfoLabel = "What's next?";
 				mActiveCaptions = {
@@ -274,7 +274,7 @@ void HelloKinectMultitrackGestureApp::update()
 			}
 		}
 		else if (mAppState == AppState::CHOOSE_ACTIVITY) {
-			// Check if maximum duration has been reached:
+			// Loop playhead, if necessary:
 			if (mMultitrackController->getTimer()->getPlayhead() >= kSceneDurationSec) {
 				mMultitrackController->getTimer()->start();
 			}
@@ -283,7 +283,7 @@ void HelloKinectMultitrackGestureApp::update()
 			if (analyzeGesture(&recognizedGesture)) {
 				// Check for control gesture:
 				if (recognizedGesture == "CONTROL") {
-					mMultitrackController->resetAll();
+					mMultitrackController->resetSequence();
 					addTrack();
 					mActiveCaptions.clear();
 					transitionToState(AppState::HOME, mStateTransitionMedium, "Starting a new movie in ");
@@ -318,6 +318,7 @@ void HelloKinectMultitrackGestureApp::update()
 		}
 		else if (mAppState == AppState::BEGIN_ACTOR) {
 			mMultitrackController->start();
+			mMultitrackController->getTimer()->start();
 			mAppState = AppState::RECORD_ACTOR;
 			mInfoLabel = "";
 		}

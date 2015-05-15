@@ -43,6 +43,13 @@ namespace itp { namespace multitrack {
 		{
 			return mPlayhead;
 		}
+
+		/** @brief playhead setter method */
+		void setPlayhead(const double& position)
+		{
+			mPlayhead = position;
+			mStart = ci::app::getElapsedSeconds() - mPlayhead;
+		}
 		
 		/** @brief timer update method */
 		void update()
@@ -60,13 +67,13 @@ namespace itp { namespace multitrack {
 		}
 		
 		/** @brief timer stop method */
-		void stop()
+		void pause()
 		{
 			mActive = false;
 		}
 
 		/** @brief timer reset method */
-		void reset()
+		void stop()
 		{
 			mActive   = false;
 			mStart    = 0.0;
