@@ -2,20 +2,27 @@
 
 #include <multitrack/Track.h>
 #include <multitrack/TypeTrack.h>
-#include <multitrack/TrackGroup.h>
 
 namespace itp { namespace multitrack {
-	
-	class Controller : public TrackBase {
+
+	class Controller {
 	public:
 		
 		typedef std::shared_ptr<Controller>			Ref;
 		typedef std::shared_ptr<const Controller>	ConstRef;
 		
+		struct Group 
+		{
+			std::string		mName;		//!< group name
+			Track::RefDeque	mTracks;	//!< track vector
+		};
+
 	private:
 		
 		Timer::Ref		mTimer;
-		TrackGroup::Ref	mSequence;
+
+		Group			mSequence;
+		
 		Track::RefDeque	mRecordingDevices;
 		ci::fs::path	mDirectory;
 		size_t			mUidGenerator;
@@ -23,7 +30,7 @@ namespace itp { namespace multitrack {
 		/** @brief default constructor */
 		Controller(const ci::fs::path& iDirectory) :
 			mTimer( Timer::create() ),
-			mSequence( TrackGroup::create( mTimer ) ),
+			mSequence(Group()),
 			mDirectory( iDirectory ),
 			mUidGenerator( 0 )
 		{ /* no-op */ }
@@ -43,28 +50,39 @@ namespace itp { namespace multitrack {
 		
 		void update()
 		{
+			// Update timer:
 			mTimer->update();
-			mSequence->update();
+			// Update sequence:
+			for (auto& tTrack : mSequence.mTracks) {
+				tTrack->update();
+			}
 		}
 		
 		void draw()
 		{
-			mSequence->draw();
+			ci::gl::color(1.0, 1.0, 1.0, 1.0);
+			for (auto& tTrack : mSequence.mTracks) {
+				tTrack->draw();
+			}
 		}
 		
 		void start()
 		{
-			mSequence->start();
+			for (auto& tTrack : mSequence.mTracks) {
+				tTrack->start();
+			}
 		}
 		
 		void stop()
 		{
-			mSequence->stop();
+			for (auto& tTrack : mSequence.mTracks) {
+				tTrack->stop();
+			}
 		}
 
 		void resetSequence()
 		{
-			mSequence->removeAllTracks();
+			mSequence.mTracks.clear();
 			mUidGenerator = 0;
 		}
 
@@ -80,7 +98,13 @@ namespace itp { namespace multitrack {
 				// Check current device validity:
 				if (tDevice) {
 					// Remove track:
-					mSequence->removeTrack(tDevice);
+					for (Track::RefDeque::iterator it = mSequence.mTracks.begin(); it != mSequence.mTracks.end(); it++) {
+						if (tDevice.get() == (*it).get()) {
+							(*it)->stop();
+							mSequence.mTracks.erase(it);
+							break;
+						}
+					}
 				}
 			}
 			// Clear recording devices:
@@ -93,13 +117,25 @@ namespace itp { namespace multitrack {
 			for (auto& tDevice : mRecordingDevices) {
 				// Check current device validity:
 				if (tDevice) {
+					// Get frame count:
+					size_t tFrameCount = 0;
+					for (const auto &tTrack : mSequence.mTracks) {
+						tFrameCount = std::max(tFrameCount, tTrack->getFrameCount());
+					}
 					// Convert non-empty track to player:
-					if ( tDevice->getFrameCount() > 0 ) {
+					if (tFrameCount > 0) {
 						tDevice->gotoPlayMode();
 					}
 					// Remove empty track:
 					else {
-						mSequence->removeTrack(tDevice);
+						// Remove track:
+						for (Track::RefDeque::iterator it = mSequence.mTracks.begin(); it != mSequence.mTracks.end(); it++) {
+							if (tDevice.get() == (*it).get()) {
+								(*it)->stop();
+								mSequence.mTracks.erase(it);
+								break;
+							}
+						}
 					}
 				}
 			}
@@ -109,14 +145,26 @@ namespace itp { namespace multitrack {
 		
 		template <typename T> void addRecorder(std::function<T(void)> recorderCb, std::function<void(const T&)> playerCb)
 		{
-			mRecordingDevices.push_back(mSequence->addRecorderTrack<T>(mDirectory, "track_" + std::to_string(mUidGenerator), recorderCb, playerCb));
+			// Create typed track:
+			typename TrackT<T>::Ref tTrack = TrackT<T>::create(mDirectory, "track_" + std::to_string(mUidGenerator), mTimer);
+			// Add track to controller:
+			mSequence.mTracks.push_back(tTrack);
+			// Initialize recorder:
+			tTrack->gotoRecordMode(recorderCb, playerCb);
+			// TODO
+			mRecordingDevices.push_back(tTrack);
 			// Increment uid generator:
 			mUidGenerator++;
 		}
 
 		template <typename T> void addPlayer(std::function<void(const T&)> playerCb)
 		{
-			mSequence->addPlayerTrack<T>(mDirectory, "track_" + std::to_string(mUidGenerator), playerCb);
+			// Create typed track:
+			typename TrackT<T>::Ref tTrack = TrackT<T>::create(mDirectory, "track_" + std::to_string(mUidGenerator), mTimer);
+			// Add track to controller:
+			mSequence.mTracks.push_back(tTrack);
+			// Initialize recorder:
+			tTrack->gotoPlayMode(playerCb);
 			// Increment uid generator:
 			mUidGenerator++;
 		}

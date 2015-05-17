@@ -111,7 +111,7 @@ namespace itp { namespace multitrack {
 		typedef std::function<void(const T&)>		PlayerCallback;
 
 		/** @brief track player mediator */
-		class Player : public TrackBase {
+		class Player : public Mediator {
 		public:
 
 			typedef std::shared_ptr<Player>			Ref;
@@ -191,7 +191,7 @@ namespace itp { namespace multitrack {
 				double tBegin    = mInfoVec.front().first;
 				double tEnd      = mInfoVec.back().first;
 				// Get playhead:
-				const double& tPlayhead = mTrack->getTimer()->getPlayhead();
+				const double& tPlayhead = mTrack->mTimer->getPlayhead();
 				// Handle playhead out-of-range:
 				if (tPlayhead < tBegin || tPlayhead > tEnd) {
 					mInitialized = false;
@@ -232,7 +232,7 @@ namespace itp { namespace multitrack {
 		};
 
 		/** @brief track recorder mediator */
-		class Recorder : public TrackBase {
+		class Recorder : public Mediator {
 		public:
 
 			typedef std::shared_ptr<Recorder> Ref;
@@ -300,7 +300,7 @@ namespace itp { namespace multitrack {
 						// Compose frame filename:
 						std::string tFilename = ("frame_" + std::to_string(mTrack->mFrameCount) + "." + get_file_extension<T>());
 						// Write frame to info file:
-						mInfoFile << mTrack->getTimer()->getPlayhead() << ' ' << tFilename << std::endl;
+						mInfoFile << mTrack->mTimer->getPlayhead() << ' ' << tFilename << std::endl;
 						// Write frame contents to file:
 						write_to_file<T>(mTrack->getDirectory() / tFilename, mBuffer);
 						// Increment frame count:
@@ -363,7 +363,7 @@ namespace itp { namespace multitrack {
 		
 	private:
 
-		TrackBase::Ref	mMediator;		//!< shared_ptr to track mediator
+		Mediator::Ref	mMediator;		//!< shared_ptr to track mediator
 		ci::fs::path	mDirectory;		//!< track's base directory
 		std::string		mName;			//!< track's base filename
 		size_t			mFrameCount;	//!< number of frames recorded
@@ -371,10 +371,6 @@ namespace itp { namespace multitrack {
 		/** @brief default constructor */
 		TrackT(const ci::fs::path& iDirectory, const std::string& iName, Timer::Ref iTimer)
 			: Track(iTimer), mDirectory(iDirectory), mName(iName), mFrameCount(0) { /* no-op */ }
-		
-		/** @brief parented constructor */
-		TrackT(const ci::fs::path& iDirectory, const std::string& iName, Track::Ref iParent)
-			: Track(iParent), mDirectory(iDirectory), mName(iName), mFrameCount(0) { /* no-op */ }
 		
 	public:
 		
@@ -397,7 +393,7 @@ namespace itp { namespace multitrack {
 			// Stop mediator:
 			if (mMediator) mMediator->stop();
 			// Cast mediator to recorder:
-			typename Recorder::Ref tRecorderCast = std::dynamic_pointer_cast<Recorder>(mMediator);
+			typename Recorder::Ref tRecorderCast = mMediator->getRef<Recorder>();
 			// Return on cast error:
 			if (!tRecorderCast) { return; }
 			// Create player mediator:
