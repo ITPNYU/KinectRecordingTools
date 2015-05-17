@@ -440,7 +440,9 @@ void HelloKinectMultitrackGestureApp::addTrack()
 	{
 		if (iSurface.get() == NULL) return;
 		gl::enable(GL_TEXTURE_2D);
-		ci::gl::draw(ci::gl::Texture::create(*(iSurface.get())), ci::app::getWindowBounds());
+		ci::gl::TextureRef tex = ci::gl::Texture::create(*(iSurface.get()));
+		ci::Rectf rect = ci::Rectf(0, 0, kRawFrameWidth, kRawFrameHeight).getCenteredFit(getWindowBounds(),true);
+		ci::gl::draw(tex, rect);
 	};
 	// Create image recorder track:
 	mMultitrackController->addRecorder<ci::SurfaceRef>(tImgRecorderCallbackFn, tImgPlayerCallbackFn);
@@ -594,6 +596,6 @@ void HelloKinectMultitrackGestureApp::renderSilhouetteGpu()
 
 CINDER_APP(HelloKinectMultitrackGestureApp, RendererGl, [](App::Settings* settings)
 {
-	settings->prepareWindow(Window::Format().size(1024, 768).title("ITP Kinect Recording Tools"));
+	settings->prepareWindow(Window::Format().size(1920, 1080).title("ITP Kinect Recording Tools"));
 	settings->setFrameRate(60.0f);
 })
