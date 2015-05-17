@@ -5,6 +5,7 @@
 #include "cinder/ImageIo.h"
 #include "cinder/Utilities.h"
 #include "cinder/Timeline.h"
+#include "cinder/Rand.h"
 
 #include "Kinect2.h"
 
@@ -27,6 +28,8 @@ static const size_t kRecognitionSamples    = 30;
 static const size_t kRecognitionSamplesMin = 25;
 
 static const double kSceneDurationSec = 20.0;
+static const double kShotDurationMin  = 3.0;
+static const double kShotDurationMax  = 8.0;
 
 enum AppState
 {
@@ -70,6 +73,8 @@ public:
 
 	void receiveLoopCallback();
 
+	void createMovie();
+	void addBackgroundTrack();
 	void addTrack();
 
 	bool addGestureTemplate(const std::string& poseName);
@@ -123,6 +128,8 @@ public:
 
 	foil::gesture::Recognizer			mRecognizer;
 	foil::gesture::Result::Deque		mRecognizerBuffer;
+	
+	std::vector<ci::fs::path>			mBackgroundImgPaths;
 };
 
 void HelloKinectMultitrackGestureApp::drawCaption(const CaptionImage& caption)
@@ -150,6 +157,8 @@ void HelloKinectMultitrackGestureApp::drawCaptions(const CaptionImage::Deque& ca
 
 void HelloKinectMultitrackGestureApp::setup()
 {
+	// Seed random number generator:
+	ci::randSeed((unsigned)time(NULL) );
 	// Enable texture mode:
 	ci::gl::enable(GL_TEXTURE_2D);
 	// Initialize timestamp:
@@ -200,6 +209,18 @@ void HelloKinectMultitrackGestureApp::setup()
 	// Setup FBO:
 	ci::gl::Fbo::Format tSilhouetteFboFormat;
 	mSilhouetteFbo = ci::gl::Fbo::create(kRawFrameWidth, kRawFrameHeight, tSilhouetteFboFormat.colorTexture());
+	// Get background image directory:
+	ci::fs::path assetDir = getAssetDirectories().front() / "background";
+	// Iterate over directory:
+	if (fs::is_directory(assetDir)) {
+		// Iterate over directory:
+		fs::directory_iterator dirEnd;
+		for (fs::directory_iterator it(assetDir); it != dirEnd; it++) {
+			if ((*it).path().extension() == ".png") {
+				mBackgroundImgPaths.push_back(*it);
+			}
+		}
+	}
 	// Setup multitrack controller:
 	mMultitrackController = itp::multitrack::Controller::create(getHomeDirectory() / "Desktop" / "Tests");
 	mMultitrackController->getTimer()->setLoopCallback(std::bind(&HelloKinectMultitrackGestureApp::receiveLoopCallback, this));
@@ -212,14 +233,14 @@ void HelloKinectMultitrackGestureApp::setup()
 	// Initialize application state:
 	mFont = Font("Helvetica", 40);
 	mInfoLabel = "";
-	mAppState = AppState::WAIT_FOR_SINGLE_USER;
+	mAppState = AppState::NONE;
 	mActiveBodyCount = 0;
 	mInStateTransition = false;
 	mEstablishedPoseIdle = false;
 	mEstablishedPoseControl = false;
 	mEstablishedPoseActor = false;
-	// Add initial track:
-	addTrack();
+	// Create new movie:
+	createMovie();
 }
 
 void HelloKinectMultitrackGestureApp::update()
@@ -251,7 +272,7 @@ void HelloKinectMultitrackGestureApp::update()
 	// If in state transition, block new transitions:
 	if (!mInStateTransition) {
 		// Handle states:
-		if (mActiveBodyCount != 1) {
+		if (mActiveBodyCount != 1 && mAppState != AppState::RECORD_ACTOR) {
 			if (mAppState != AppState::WAIT_FOR_SINGLE_USER) {
 				mAppState = AppState::WAIT_FOR_SINGLE_USER;
 				mActiveCaptions.clear();
@@ -291,6 +312,7 @@ void HelloKinectMultitrackGestureApp::update()
 				if (recognizedGesture == "CONTROL") {
 					mMultitrackController->resetSequence();
 					mActiveCaptions.clear();
+					createMovie();
 					transitionToState(AppState::HOME, mStateTransitionMedium, "Starting a new movie in ");
 				}
 				// Check for actor gesture:
@@ -425,6 +447,82 @@ void HelloKinectMultitrackGestureApp::receiveLoopCallback()
 		}
 		default: { break; }
 	}
+}
+
+void HelloKinectMultitrackGestureApp::createMovie()
+{
+	// Add background track:
+	addBackgroundTrack();
+	// Add user track:
+	addTrack();
+	// Stop timer:
+	mMultitrackController->getTimer()->stop();
+}
+
+void HelloKinectMultitrackGestureApp::addBackgroundTrack()
+{
+	// Get track id:
+	size_t trackId = mMultitrackController->getCurrentId();
+	// Get paths:
+	ci::fs::path rootDir = getHomeDirectory() / "Desktop" / "Tests";
+	ci::fs::path currDir = rootDir / ("track_" + std::to_string(trackId));
+	ci::fs::path infoPth = rootDir / ("track_" + std::to_string(trackId) + "_info.txt");
+	// Check if directory already exists:
+	if (ci::fs::exists(currDir)) {
+		// If path exists but is not a directory, throw:
+		if (!fs::is_directory(currDir)) {
+			throw std::runtime_error("Could not open \'" + currDir.string() + "\' as a directory");
+		}
+	}
+	// Create directory:
+	else if (!boost::filesystem::create_directory(currDir)) {
+		throw std::runtime_error("Could not create \'" + currDir.string() + "\' as a directory");
+	}
+	// Try to open info file:
+	std::ofstream tInfoFile;
+	tInfoFile.open(infoPth.string());
+	if (tInfoFile.is_open()) {
+		// Get total background image count:
+		size_t totalBackgroundCount = mBackgroundImgPaths.size();
+		// Prepare time iterator:
+		float timeIter = 0.0f;
+		// Prepare frame iterator:
+		size_t frameIter = 0;
+		// Iterate over duration:
+		while (timeIter < kSceneDurationSec) {
+			// Choose new shot duration:
+			float shotDuration = ci::randFloat(kShotDurationMin, kShotDurationMax);
+			// Load random background image:
+			ci::Surface surf = ci::Surface(loadImage(mBackgroundImgPaths[ci::randInt(0, totalBackgroundCount)]));
+			ci::writeImage(currDir / ("frame_" + std::to_string(frameIter) + ".png"), surf);
+			// Write frame to info file:
+			tInfoFile << std::to_string(timeIter) + " frame_" + std::to_string(frameIter) + ".png" << std::endl;
+			// Update iterators:
+			timeIter += shotDuration;
+			frameIter++;
+		}
+		// Load random background image:
+		ci::Surface surf = ci::Surface(loadImage(mBackgroundImgPaths[ci::randInt(0, totalBackgroundCount)]));
+		ci::writeImage(currDir / ("frame_" + std::to_string(frameIter) + ".png"), surf);
+		// Write final frame to info file:
+		tInfoFile << std::to_string(kSceneDurationSec) + " frame_" + std::to_string(frameIter) + ".png" << std::endl;
+		// Close info file:
+		tInfoFile.close();
+	}
+	else {
+		throw std::runtime_error("Application could not open file: \'" + infoPth.string() + "\'");
+	}
+	// Create image player callback lambda:
+	auto tImgPlayerCallbackFn = [&](const ci::SurfaceRef& iSurface) -> void
+	{
+		if (iSurface.get() == NULL) return;
+		gl::enable(GL_TEXTURE_2D);
+		ci::gl::TextureRef tex = ci::gl::Texture::create(*(iSurface.get()));
+		ci::Rectf rect = ci::Rectf(0, 0, kRawFrameWidth, kRawFrameHeight).getCenteredFit(getWindowBounds(), true);
+		ci::gl::draw(tex, rect);
+	};
+	// Add player track:
+	mMultitrackController->addPlayer<ci::SurfaceRef>(tImgPlayerCallbackFn);
 }
 
 void HelloKinectMultitrackGestureApp::addTrack()
