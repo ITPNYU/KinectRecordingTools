@@ -404,12 +404,20 @@ namespace itp { namespace multitrack {
 			mMediator = Player::create(getRef<TrackT>(), tRecorderCast->getPlayerCallbackFn());
 		}
 
-		void gotoRecordMode(RecorderCallback iRecorderCallback, PlayerCallback iPlayerCallback)
+		void gotoPlayMode(PlayerCallback playerCb)
+		{
+			// Stop mediator:
+			if (mMediator) mMediator->stop();
+			// Create player mediator:
+			mMediator = Player::create(getRef<TrackT>(), playerCb);
+		}
+
+		void gotoRecordMode(RecorderCallback recorderCb, PlayerCallback playerCb)
 		{
 			// Stop mediator:
 			if( mMediator ) mMediator->stop();
 			// Create recorder mediator:
-			mMediator = Recorder::create(getRef<TrackT>(), iRecorderCallback, iPlayerCallback);
+			mMediator = Recorder::create(getRef<TrackT>(), recorderCb, playerCb);
 		}
 
 		/** @brief returns the track's frame-count */

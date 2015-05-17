@@ -35,6 +35,11 @@ namespace itp { namespace multitrack {
 		{
 			return Controller::Ref( new Controller( std::forward<Args>( args )... ) );
 		}
+
+		const size_t& getCurrentId() const
+		{
+			return mUidGenerator;
+		}
 		
 		void update()
 		{
@@ -104,7 +109,14 @@ namespace itp { namespace multitrack {
 		
 		template <typename T> void addRecorder(std::function<T(void)> recorderCb, std::function<void(const T&)> playerCb)
 		{
-			mRecordingDevices.push_back(mSequence->addTrack<T>(mDirectory, "track_" + std::to_string(mUidGenerator), recorderCb, playerCb));
+			mRecordingDevices.push_back(mSequence->addRecorderTrack<T>(mDirectory, "track_" + std::to_string(mUidGenerator), recorderCb, playerCb));
+			// Increment uid generator:
+			mUidGenerator++;
+		}
+
+		template <typename T> void addPlayer(std::function<void(const T&)> playerCb)
+		{
+			mSequence->addPlayerTrack<T>(mDirectory, "track_" + std::to_string(mUidGenerator), playerCb);
 			// Increment uid generator:
 			mUidGenerator++;
 		}

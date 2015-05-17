@@ -83,7 +83,7 @@ namespace itp { namespace multitrack {
 		}
 		
 		template <typename T> 
-		Track::Ref addTrack(const ci::fs::path& dir, const std::string& name, std::function<T(void)> recorderCb, std::function<void(const T&)> playerCb)
+		Track::Ref addRecorderTrack(const ci::fs::path& dir, const std::string& name, std::function<T(void)> recorderCb, std::function<void(const T&)> playerCb)
 		{
 			// Create typed track:
 			typename TrackT<T>::Ref tTrack = TrackT<T>::create(dir, name, getRef<TrackGroup>());
@@ -91,6 +91,19 @@ namespace itp { namespace multitrack {
 			mTracks.push_back(tTrack);
 			// Initialize recorder:
 			tTrack->gotoRecordMode(recorderCb, playerCb);
+			// Return track:
+			return tTrack;
+		}
+
+		template <typename T>
+		Track::Ref addPlayerTrack(const ci::fs::path& dir, const std::string& name, std::function<void(const T&)> playerCb)
+		{
+			// Create typed track:
+			typename TrackT<T>::Ref tTrack = TrackT<T>::create(dir, name, getRef<TrackGroup>());
+			// Add track to controller:
+			mTracks.push_back(tTrack);
+			// Initialize recorder:
+			tTrack->gotoPlayMode(playerCb);
 			// Return track:
 			return tTrack;
 		}
