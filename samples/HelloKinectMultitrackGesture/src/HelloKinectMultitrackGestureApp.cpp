@@ -191,7 +191,7 @@ namespace itp { namespace multitrack {
 		bool										mInStateTransition;
 		ci::Anim<float>								mTransitionAnim; //deprecated
 
-		std::map<std::string, ci::gl::TextureRef>	mPoseArchitypes;
+		std::map<std::string, ci::gl::TextureRef>	mPoseArchetypes;
 
 		bool										mEstablishedPoseIdle;
 		bool										mEstablishedPoseControl;
@@ -279,10 +279,7 @@ namespace itp { namespace multitrack {
 			mEstablishedPoseIdle = false;
 			mEstablishedPoseControl = false;
 			mEstablishedPoseActor = false;
-			// Create new movie:
-			// TODO: startNewMovie();
-
-			// TODO wip
+			// Set initial mode:
 			setMode("WaitForUserMode");
 		}
 
@@ -323,22 +320,27 @@ namespace itp { namespace multitrack {
 			return mActiveBodyCount;
 		}
 
-		bool hasPoseArchitype(const std::string& name) const
+		ci::gl::FboRef getSilhouetteFbo() const
 		{
-			return (mPoseArchitypes.find(name) != mPoseArchitypes.cend());
-			//std::map<std::string, ci::gl::TextureRef>	mPoseArchitypes;
+			return mSilhouetteFbo;
 		}
 
-		ci::gl::TextureRef getPoseArchitype(const std::string& name) const
+		bool hasPoseArchetype(const std::string& name) const
 		{
-			std::map<std::string, ci::gl::TextureRef>::const_iterator findIt = mPoseArchitypes.find(name);
-			if (findIt != mPoseArchitypes.cend()) return (*findIt).second;
+			return (mPoseArchetypes.find(name) != mPoseArchetypes.cend());
+			//std::map<std::string, ci::gl::TextureRef>	mPoseArchetypes;
+		}
+
+		ci::gl::TextureRef getPoseArchetype(const std::string& name) const
+		{
+			std::map<std::string, ci::gl::TextureRef>::const_iterator findIt = mPoseArchetypes.find(name);
+			if (findIt != mPoseArchetypes.cend()) return (*findIt).second;
 			return nullptr;
 		}
 
-		void setPoseArchitype(const std::string& name, const ci::gl::TextureRef& pose)
+		void setPoseArchetype(const std::string& name, const ci::gl::TextureRef& pose)
 		{
-			mPoseArchitypes[name] = pose;
+			mPoseArchetypes[name] = pose;
 		}
 
 		void setMode(const std::string& name);
@@ -761,29 +763,6 @@ namespace itp { namespace multitrack {
 				mTextureLookup->unbind();
 			}
 		}
-
-		void drawCaption(const CaptionImage& caption)
-		{
-			Rectf rect = Rectf(vec2(0.0, 0.0), caption.mDim);
-			gl::color(1, 1, 1);
-			gl::drawSolidRect(rect);
-			gl::draw(caption.mTex, rect);
-			//gl::drawString(caption.mMsg, vec2(caption.mDim.x + 20.0, caption.mDim.y * 0.5), Color(1, 1, 1), mFont);
-		}
-
-		void drawCaptions(const CaptionImage::Deque& captions)
-		{
-			float padding = 5.0; // TODO: externalize
-
-			vec2 offset(0.0, 0.0);
-			for (const auto& caption : captions) {
-				gl::pushMatrices();
-				gl::translate(offset);
-				drawCaption(caption);
-				gl::popMatrices();
-				offset.y += caption.mDim.y + padding;
-			}
-		}
 	};
 
 	class WaitForUserMode : public Mode {
@@ -793,11 +772,10 @@ namespace itp { namespace multitrack {
 		std::string		mLabel;
 
 		WaitForUserMode(const Controller::Ref& controller) :
-			Mode(controller)
-		{ 
-			mFont = ci::Font("Helvetica", 40);
-			mLabel = "";
-		}
+			Mode(controller),
+			mFont(ci::Font("Helvetica", 40)),
+			mLabel("")
+		{ /* no-op */ }
 
 	public:
 
@@ -816,8 +794,7 @@ namespace itp { namespace multitrack {
 				double dur = kStateTransitionShort;
 				mTransitionAnim = dur;
 				ci::app::timeline().apply(&mTransitionAnim, 0.0f, dur, EaseNone())
-					.startFn([&](){ beginTransition(); })
-					.updateFn([&](){ mLabel = "Oh hello!"; })
+					.startFn([&](){ beginTransition(); mLabel = "Oh hello!"; })
 					.finishFn([&](){ endTransition(); mController->setMode("HomeMode"); })
 					;
 			}
@@ -837,12 +814,11 @@ namespace itp { namespace multitrack {
 		Track::Group::Ref	mPreview;
 
 		HomeMode(const Controller::Ref& controller) :
-			Mode(controller)
-		{
-			mFont = ci::Font("Helvetica", 40);
-			mLabel = "What's next?";
-			mPreview = mController->createTrackSilhouette( "Preview" );
-		}
+			Mode(controller),
+			mFont(ci::Font("Helvetica", 40)),
+			mLabel("What's next?"),
+			mPreview(mController->createTrackSilhouette("HomePreview"))
+		{ /* no-op */ }
 
 	public:
 
@@ -856,13 +832,13 @@ namespace itp { namespace multitrack {
 			if (mController->getActiveBodyCount() != 1) {
 				mController->setMode("WaitForUserMode");
 			}
-			else if (!mController->hasPoseArchitype("Idle")) {
+			else if (!mController->hasPoseArchetype("IDLE")) {
 				mController->setMode("EstablishIdlePoseMode");
 			}
-			else if (!mController->hasPoseArchitype("Control")) {
+			else if (!mController->hasPoseArchetype("CONTROL")) {
 				mController->setMode("EstablishControlPoseMode");
 			}
-			else if (!mController->hasPoseArchitype("Actor")) {
+			else if (!mController->hasPoseArchetype("ACTOR")) {
 				mController->setMode("EstablishActorPoseMode");
 			}
 			else {
@@ -875,6 +851,86 @@ namespace itp { namespace multitrack {
 			mPreview->draw();
 			ci::gl::drawStringCentered(mLabel, vec2(getWindowWidth() * 0.5f, getWindowHeight() - 100.0f), Color(1, 1, 1), mFont);
 		}
+
+		void drawCaption(const CaptionImage& caption)
+		{
+			Rectf rect = Rectf(vec2(0.0, 0.0), caption.mDim);
+			gl::color(1, 1, 1);
+			gl::drawSolidRect(rect);
+			gl::draw(caption.mTex, rect);
+			gl::drawString(caption.mMsg, vec2(caption.mDim.x + 20.0, caption.mDim.y * 0.5), Color(1, 1, 1), mFont);
+		}
+
+		void drawCaptions(const CaptionImage::Deque& captions)
+		{
+			float padding = 5.0; // TODO: externalize
+
+			vec2 offset(0.0, 0.0);
+			for (const auto& caption : captions) {
+				gl::pushMatrices();
+				gl::translate(offset);
+				drawCaption(caption);
+				gl::popMatrices();
+				offset.y += caption.mDim.y + padding;
+			}
+		}
+	};
+
+	class EstablishPoseMode : public Mode {
+	private:
+
+		std::string			mName;
+		ci::Font			mFont;
+		std::string			mLabel;
+		Track::Group::Ref	mPreview;
+
+		EstablishPoseMode(const Controller::Ref& controller, const std::string& name) :
+			Mode(controller),
+			mName(name),
+			mFont(ci::Font("Helvetica", 60)),
+			mLabel("What's next?"),
+			mPreview(mController->createTrackSilhouette("Establish" + name))
+		{ /* no-op */ }
+
+	public:
+
+		static Mode::Ref create(const Controller::Ref& controller, const std::string& name)
+		{
+			return Mode::Ref(new EstablishPoseMode(controller, name));
+		}
+
+		void update()
+		{
+			mPreview->update();
+		    if (mController->getActiveBodyCount() != 1) {
+				mController->setMode("WaitForUserMode");
+			}
+			else if (inTransition()) {
+				return;
+			}
+			else {
+				double dur = kStateTransitionLong;
+				mTransitionAnim = dur;
+				ci::app::timeline().apply(&mTransitionAnim, 0.0f, dur, EaseNone())
+					.startFn([&](){ beginTransition(); })
+					.updateFn([&](){ mLabel = "Establishing " + mName + " pose in " + std::to_string((int)mTransitionAnim) + " seconds"; })
+					.finishFn([&](){
+						endTransition();
+						ci::gl::FboRef fbo = mController->getSilhouetteFbo();
+						if (mController->addGestureTemplate(mName)) {
+							mController->setPoseArchetype(mName, ci::gl::Texture::create(fbo->readPixels8u(fbo->getBounds())));
+						}
+						mController->setMode("HomeMode");
+					})
+					;
+			}
+		}
+
+		void draw()
+		{
+			mPreview->draw();
+			ci::gl::drawStringCentered(mLabel, vec2(getWindowWidth() * 0.5f, getWindowHeight() * 0.5f), Color(1, 1, 1), mFont);
+		}
 	};
 
 	void Controller::setMode(const std::string& name)
@@ -886,13 +942,13 @@ namespace itp { namespace multitrack {
 			mMode = HomeMode::create(getRef());
 		}
 		else if ("EstablishIdlePoseMode" == name) {
-			// TODO
+			mMode = EstablishPoseMode::create(getRef(),"IDLE");
 		}
 		else if ("EstablishControlPoseMode" == name) {
-			// TODO
+			mMode = EstablishPoseMode::create(getRef(), "CONTROL");
 		}
 		else if ("EstablishActorPoseMode" == name) {
-			// TODO
+			mMode = EstablishPoseMode::create(getRef(), "ACTOR");
 		}
 		else {
 			mMode.reset();
