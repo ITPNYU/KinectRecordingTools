@@ -40,6 +40,11 @@ namespace itp { namespace multitrack {
 				return Group::Ref(new Group(std::forward<Args>(args)...));
 			}
 
+			const std::string& getName() const
+			{
+				return mName;
+			}
+
 			/** @brief adds track to bottom of group */
 			void pushBottom(const Track::Ref& track)
 			{
@@ -446,13 +451,13 @@ namespace itp { namespace multitrack {
 		PlayerCallback		mPlayerCb;		//!< player callback function
 		
 		/** @brief default constructor */
-		TrackT(const ci::fs::path& dir, const std::string& name, Timer::Ref timer, RecorderCallback recorderCb, PlayerCallback playerCb) : 
+		TrackT(const ci::fs::path& dir, const std::string& name, Timer::Ref timer, RecorderCallback recorderCb, PlayerCallback playerCb, size_t frameCount = 0) :
 			Track(timer), 
 			mDirectory(dir),
 			mName(name),
 			mRecorderCb(recorderCb),
 			mPlayerCb(playerCb),
-			mFrameCount(0)
+			mFrameCount(frameCount)
 		{ /* no-op */ }
 		
 	public:

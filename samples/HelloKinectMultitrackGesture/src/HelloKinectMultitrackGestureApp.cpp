@@ -82,22 +82,6 @@ static inline void drawCaptions(const CaptionImage::Deque& captions, const ci::v
 }
 
 
-/*
-// TODO
-template <typename T> void addPlayer(const std::string name, std::function<void(const T&)> playerCb)
-{
-Group::Ref group = Group::create(name);
-// Create typed track:
-typename TrackT<T>::Ref tTrack = TrackT<T>::create(mDirectory, "track_silhouette_" + std::to_string(mUidGenerator), mTimer);
-// Add track to group:
-mSequence.mTracks.push_back(tTrack);
-// Initialize recorder:
-tTrack->gotoPlayMode(playerCb);
-// Increment uid generator:
-mUidGenerator++;
-}
-*/
-
 namespace itp { namespace multitrack {
 
 	static inline std::string findAndReplace(const std::string& str, const std::string& toRemove, const std::string& toInsert)
@@ -340,6 +324,11 @@ namespace itp { namespace multitrack {
 			return mBodyFrame;
 		}
 
+		ci::Rectf getFboRect() const
+		{
+			return ci::Rectf(0, 0, kRawFrameWidth, kRawFrameHeight).getCenteredFit(getWindowBounds(), true);
+		}
+
 		ci::gl::FboRef getSilhouetteFbo() const
 		{
 			return mSilhouetteFbo;
@@ -478,68 +467,47 @@ namespace itp { namespace multitrack {
 			mUidCounter = 0;
 		}
 
-		void addBackgroundTrack()
+		Track::Group::Ref createTrackCinematographer(size_t frameCount)
 		{
-			// Get paths:
-			ci::fs::path rootDir = getHomeDirectory() / "Desktop" / "Tests";
-			ci::fs::path currDir = rootDir / ("track_silhouette_" + std::to_string(mUidCounter));
-			ci::fs::path infoPth = rootDir / ("track_silhouette_" + std::to_string(mUidCounter) + "_info.txt");
-			// Check if directory already exists:
-			if (ci::fs::exists(currDir)) {
-				// If path exists but is not a directory, throw:
-				if (!fs::is_directory(currDir)) {
-					throw std::runtime_error("Could not open \'" + currDir.string() + "\' as a directory");
-				}
-			}
-			// Create directory:
-			else if (!boost::filesystem::create_directory(currDir)) {
-				throw std::runtime_error("Could not create \'" + currDir.string() + "\' as a directory");
-			}
-			// Try to open info file:
-			std::ofstream tInfoFile;
-			tInfoFile.open(infoPth.string());
-			if (tInfoFile.is_open()) {
-				// Get total background image count:
-				size_t totalBackgroundCount = mBackgroundImgPaths.size();
-				// Prepare time iterator:
-				float timeIter = 0.0f;
-				// Prepare frame iterator:
-				size_t frameIter = 0;
-				// Iterate over duration:
-				while (timeIter < kSceneDurationSec) {
-					// Choose new shot duration:
-					float shotDuration = ci::randFloat(kShotDurationMin, kShotDurationMax);
-					// Load random background image:
-					ci::Surface surf = ci::Surface(loadImage(mBackgroundImgPaths[ci::randInt(0, totalBackgroundCount)]));
-					ci::writeImage(currDir / ("frame_" + std::to_string(frameIter) + ".png"), surf);
-					// Write frame to info file:
-					tInfoFile << std::to_string(timeIter) + " frame_" + std::to_string(frameIter) + ".png" << std::endl;
-					// Update iterators:
-					timeIter += shotDuration;
-					frameIter++;
-				}
-				// Load random background image:
-				ci::Surface surf = ci::Surface(loadImage(mBackgroundImgPaths[ci::randInt(0, totalBackgroundCount)]));
-				ci::writeImage(currDir / ("frame_" + std::to_string(frameIter) + ".png"), surf);
-				// Write final frame to info file:
-				tInfoFile << std::to_string(kSceneDurationSec) + " frame_" + std::to_string(frameIter) + ".png" << std::endl;
-				// Close info file:
-				tInfoFile.close();
-			}
-			else {
-				throw std::runtime_error("Application could not open file: \'" + infoPth.string() + "\'");
-			}
+			// Create group:
+			Track::Group::Ref tGroup = Track::Group::create("track_bg_group");
+			// Create image recorder callback lambda:
+			auto tImgRecorderCallbackFn = [&](void) -> ci::SurfaceRef
+			{
+				return nullptr;
+			};
 			// Create image player callback lambda:
 			auto tImgPlayerCallbackFn = [&](const ci::SurfaceRef& iSurface) -> void
 			{
 				if (iSurface.get() == NULL) return;
 				gl::enable(GL_TEXTURE_2D);
 				ci::gl::TextureRef tex = ci::gl::Texture::create(*(iSurface.get()));
-				ci::Rectf rect = ci::Rectf(0, 0, kRawFrameWidth, kRawFrameHeight).getCenteredFit(getWindowBounds(), true);
-				ci::gl::draw(tex, rect);
+				ci::gl::draw(tex, getFboRect());
 			};
-			// Add player track:
-			// TODO: mMultitrackController->addPlayer<ci::SurfaceRef>(tImgPlayerCallbackFn);
+			// Create typed track:
+			itp::multitrack::Track::Ref tTrack = itp::multitrack::TrackT<ci::SurfaceRef>::create(
+				mDirectory,
+				"track_bg",
+				mTimer,
+				tImgRecorderCallbackFn,
+				tImgPlayerCallbackFn,
+				frameCount);
+			// Initialize player:
+			tTrack->gotoPlayMode();
+			// Add track to group:
+			tGroup->pushTop(tTrack);
+			// Return output:
+			return tGroup;
+		}
+
+		void removeTrackCinematographer()
+		{
+			for (Track::Group::RefDeque::const_iterator it = mSequence.cbegin(); it != mSequence.cend(); it++) {
+				if ("track_bg_group" == (*it)->getName()) {
+					mSequence.erase(it);
+					return;
+				}
+			}
 		}
 
 		Track::Group::Ref createTrackSilhouette(const std::string& name)
@@ -558,8 +526,7 @@ namespace itp { namespace multitrack {
 				if (iSurface.get() == NULL) return;
 				gl::enable(GL_TEXTURE_2D);
 				ci::gl::TextureRef tex = ci::gl::Texture::create(*(iSurface.get()));
-				ci::Rectf rect = ci::Rectf(0, 0, kRawFrameWidth, kRawFrameHeight).getCenteredFit(getWindowBounds(), true);
-				ci::gl::draw(tex, rect);
+				ci::gl::draw(tex, getFboRect());
 			};
 			// Create typed track:
 			itp::multitrack::Track::Ref tTrack = itp::multitrack::TrackT<ci::SurfaceRef>::create(
@@ -598,14 +565,15 @@ namespace itp { namespace multitrack {
 			*/
 		}
 
-		void addTrackGroup(const Track::Group::Ref& group)
+		void addTrackGroup(const Track::Group::Ref& group, bool toBack)
 		{
 			// Check validity:
 			if (group) {
 				// Check framecount:
 				if (group->getFrameCount() > 0) {
 					// Add to sequence:
-					mSequence.push_back(group);
+					if (toBack) mSequence.push_back(group);
+					else mSequence.push_front(group);
 					// Set to play mode:
 					group->gotoPlayMode();
 				}
@@ -982,7 +950,7 @@ namespace itp { namespace multitrack {
 
 		PerformActorMode(const Controller::Ref& controller) :
 			Mode(controller, ci::Font("Helvetica", 40), ""),
-			mRecorder(mController->createTrackSilhouette("track_silhouette_" + std::to_string(mController->getNextUid())))
+			mRecorder(mController->createTrackSilhouette("track_" + std::to_string(mController->getNextUid())))
 		{ 
 			mController->startSequence();
 			mRecorder->start();
@@ -1029,7 +997,7 @@ namespace itp { namespace multitrack {
 		void complete()
 		{
 			mRecorder->stop();
-			mController->addTrackGroup(mRecorder);
+			mController->addTrackGroup(mRecorder, true);
 			mController->setMode(TransitionCardMode::create(
 				mController,
 				kStateTransitionLong,
@@ -1051,21 +1019,145 @@ namespace itp { namespace multitrack {
 		{
 			typedef std::deque<ItemInfo> Deque;
 
-			double			mTime;
-			ci::fs::path	mPath;
+			double						mTime;
+			ci::gl::TextureRef			mTex;
+			size_t						mId;
+
+			struct sort_by_time_a { bool operator()(const ItemInfo& a, const ItemInfo& b) { return (a.mTime < b.mTime); } };
+			struct sort_by_time_d { bool operator()(const ItemInfo& a, const ItemInfo& b) { return (a.mTime > b.mTime); } };
+
+			static void sort(ItemInfo::Deque& items, bool ascending)
+			{
+				if (ascending) { std::sort(items.begin(), items.end(), sort_by_time_a()); }
+				else           { std::sort(items.begin(), items.end(), sort_by_time_d()); }
+			}
+		};
+
+		struct InfoManager
+		{
+			ItemInfo::Deque				mInfoDeque;
+			ItemInfo::Deque::iterator	mInfoIterator;
+			double						mKeyTimeCurr;
+			double						mKeyTimeNext;
+			bool						mInitialized;
+
+			InfoManager() { reset(); }
+
+			void reset()
+			{
+				mKeyTimeCurr = 0.0;
+				mKeyTimeNext = 0.0;
+				mInitialized = false;
+				mInfoDeque.clear();
+			}
+
+			void sort()
+			{
+				ItemInfo::sort(mInfoDeque, true);
+				mInitialized = false;
+			}
+
+			size_t getFrameCount() const
+			{
+				return mInfoDeque.size();
+			}
+
+			void addItem(const ItemInfo& item)
+			{
+				mInfoDeque.push_back(item);
+				sort();
+			}
+
+			void update(double playhead)
+			{
+				// Handle empty track:
+				if (mInfoDeque.empty()) {
+					mInitialized = false;
+					return;
+				}
+				// Get track endpoints:
+				double tBegin = mInfoDeque.front().mTime;
+				double tEnd = mInfoDeque.back().mTime;
+				// Handle playhead out-of-range:
+				if (playhead < tBegin || playhead > tEnd) {
+					mInitialized = false;
+					return;
+				}
+				// Activate, if necessary:
+				if (!mInitialized) {
+					mInitialized = true;
+					mInfoIterator = mInfoDeque.begin();
+					mKeyTimeCurr = mInfoDeque.front().mTime;
+					mKeyTimeNext = ((mInfoDeque.size() > 1) ? (mInfoIterator + 1)->mTime : mKeyTimeCurr);
+				}
+				// Update iterator:
+				while (playhead >= mKeyTimeNext && mInfoIterator != mInfoDeque.end()) {
+					mKeyTimeCurr = mInfoIterator->mTime;
+					mKeyTimeNext = ((++mInfoIterator == mInfoDeque.end()) ? mKeyTimeCurr : mInfoIterator->mTime);
+				}
+			}
+
+			void draw(const ci::Rectf& rect)
+			{
+				if (!mInitialized || mInfoIterator->mTex.get() == NULL) return;
+				gl::draw(mInfoIterator->mTex, rect);
+			}
+
+			void save(const std::string& uid, const std::vector<ci::fs::path>& imagePaths)
+			{
+				// Sort info:
+				sort();
+				// Get paths:
+				ci::fs::path rootDir = getHomeDirectory() / "Desktop" / "Tests";
+				ci::fs::path currDir = rootDir / uid;
+				ci::fs::path infoPth = rootDir / (uid + "_info.txt");
+				// Check if directory already exists:
+				if (ci::fs::exists(currDir)) {
+					// If path exists but is not a directory, throw:
+					if (!fs::is_directory(currDir)) {
+						throw std::runtime_error("Could not open \'" + currDir.string() + "\' as a directory");
+					}
+				}
+				// Create directory:
+				else if (!boost::filesystem::create_directory(currDir)) {
+					throw std::runtime_error("Could not create \'" + currDir.string() + "\' as a directory");
+				}
+				// Try to open info file:
+				std::ofstream tInfoFile;
+				tInfoFile.open(infoPth.string());
+				if (tInfoFile.is_open()) {
+					size_t itemCount = mInfoDeque.size();
+					for (size_t i = 0; i < itemCount; i++) {
+						// Write image:
+						ci::Surface surf = ci::Surface(loadImage(imagePaths[mInfoDeque[i].mId]));
+						ci::writeImage(currDir / ("frame_" + std::to_string(i) + ".png"), surf);
+						// Write frame to info file:
+						tInfoFile << std::to_string(mInfoDeque[i].mTime) + " frame_" + std::to_string(i) + ".png" << std::endl;
+					}
+					// Close info file:
+					tInfoFile.close();
+				}
+				else {
+					throw std::runtime_error("Application could not open file: \'" + infoPth.string() + "\'");
+				}
+			}
 		};
 
 		Track::Group::Ref					mPreview;
-		ItemInfo::Deque						mInfoDeque;
 		Submode								mSubmode;
 		std::vector<ci::gl::TextureRef>		mBackgroundImages;
+
+		double								mPlayheadCurr;
 		size_t								mSelectionCurr;
 		size_t								mSelectionFrames;
+
+		InfoManager							mInfoManager;
 
 		PerformCinematographerMode(const Controller::Ref& controller) :
 			Mode(controller, ci::Font("Helvetica", 40), ""),
 			mPreview(mController->createTrackSilhouette("PREVIEW")),
-			mSubmode(Submode::WAIT_FOR_NEW_MARKER),
+			mSubmode(Submode::CHOOSE_IMAGE),
+			mPlayheadCurr(0.0),
 			mSelectionCurr(SIZE_MAX)
 		{
 			// Load background images:
@@ -1073,6 +1165,11 @@ namespace itp { namespace multitrack {
 			for (const auto& imagePath : imagePaths) {
 				mBackgroundImages.push_back(ci::gl::Texture::create(ci::Surface(loadImage(imagePath))));
 			}
+			// Initialize info manager:
+			mInfoManager = InfoManager();
+			mInfoManager.addItem({ kSceneDurationSec, mBackgroundImages[0], 0 }); // TODO this fix is hackish
+			// Remove previous cinematographer:
+			mController->removeTrackCinematographer();
 			// Start sequence:
 			mController->startSequence();
 		}
@@ -1086,13 +1183,12 @@ namespace itp { namespace multitrack {
 
 		void update()
 		{
+			mInfoManager.update(mController->getTimer()->getPlayhead());
 			mController->updateSequence();
 			mPreview->update();
 			if (mController->getActiveBodyCount() != 1) {
 				mPreview->stop();
 				mController->setMode("WaitForUserMode");
-
-				// TODO: need to cancel out????
 			}
 			else {
 				switch (mSubmode) {
@@ -1103,9 +1199,9 @@ namespace itp { namespace multitrack {
 						// Check threshold:
 						if (bestResult.mScore >= kRecognitionThreshold) {
 							if ("CONTROL" == bestResult.mName) {
-								mInfoDeque.push_back({ mController->getTimer()->getPlayhead(), "" });
-								mController->stopSequence();
+								mPlayheadCurr = mController->getTimer()->getPlayhead();
 								mSelectionFrames = 0;
+								mController->stopSequence();
 								mSubmode = Submode::CHOOSE_IMAGE;
 							}
 						}
@@ -1118,16 +1214,17 @@ namespace itp { namespace multitrack {
 								if (body.isTracked()) {
 									ci::vec3 posRaw = body.getJointMap().at(JointType_HandRight).getPosition();
 									ci::ivec2 pos = mController->getKinect()->mapCameraToColor(posRaw);
-									size_t selectionCurr = static_cast<size_t>(ci::lmap<float>(static_cast<float>(pos.x), 0.0f, static_cast<float>(getWindowWidth()), 0.0f, static_cast<float>(mBackgroundImages.size())));
+									ci::Rectf rect = mController->getFboRect();
+									size_t selectionCurr = static_cast<size_t>(ci::lmap<float>(static_cast<float>(pos.x), rect.x1, rect.x2, 0.0f, static_cast<float>(mBackgroundImages.size())));
 									if (mSelectionCurr == selectionCurr) {
 										if (mSelectionFrames == kSelectItemFramesMin) {
-											// Set path:
-											mInfoDeque.back().mPath = mController->getBackgroundImagePaths()[mSelectionCurr];
+											// Update info deque:
+											mInfoManager.addItem({ mPlayheadCurr, mBackgroundImages[mSelectionCurr], mSelectionCurr });
 											// Restart sequence and process:
 											mSelectionFrames = 0;
 											mSelectionCurr = SIZE_MAX;
-											mSubmode = Submode::WAIT_FOR_NEW_MARKER;
 											mController->startSequence();
+											mSubmode = Submode::WAIT_FOR_NEW_MARKER;
 										}
 										else {
 											mSelectionFrames++;
@@ -1154,6 +1251,7 @@ namespace itp { namespace multitrack {
 
 		void draw()
 		{
+			mInfoManager.draw(mController->getFboRect());
 			mController->drawSequence();
 			mPreview->draw();
 			ci::gl::drawStringCentered(mLabel, vec2(getWindowWidth() * 0.5f, getWindowHeight() - 100.0f), Color(1, 1, 1), mFont);
@@ -1195,11 +1293,12 @@ namespace itp { namespace multitrack {
 
 		void complete()
 		{
-			// TODO: dont forget that we need to sort mInfoDeque by time before exporting it!
-
 			mPreview->stop();
-			// TODO
-			//mController->addTrackGroup(mPreview);
+			// Save track:
+			mInfoManager.save("track_bg", mController->getBackgroundImagePaths());
+			// Add group to sequence:
+			mController->addTrackGroup(mController->createTrackCinematographer(mInfoManager.getFrameCount()), false);
+			// Return home:
 			mController->setMode(TransitionCardMode::create(
 				mController,
 				kStateTransitionLong,
