@@ -28,6 +28,8 @@ static const double kRecognitionThreshold  = 0.85;
 static const size_t kRecognitionSamples    = 30;
 static const size_t kRecognitionSamplesMin = 25;
 
+static const size_t kSelectItemFramesMin = 100;
+
 static const double kSceneDurationSec = 20.0;
 static const double kShotDurationMin  = 3.0;
 static const double kShotDurationMax  = 8.0;
@@ -318,9 +320,24 @@ namespace itp { namespace multitrack {
 			return mDirectory;
 		}
 
+		const std::vector<ci::fs::path>& getBackgroundImagePaths() const
+		{
+			return mBackgroundImgPaths;
+		}
+
 		const size_t& getActiveBodyCount() const
 		{
 			return mActiveBodyCount;
+		}
+
+		Kinect2::DeviceRef getKinect() const
+		{
+			return mDevice;
+		}
+
+		const Kinect2::BodyFrame& getBodyFrame() const
+		{
+			return mBodyFrame;
 		}
 
 		ci::gl::FboRef getSilhouetteFbo() const
@@ -338,7 +355,6 @@ namespace itp { namespace multitrack {
 		bool hasPoseArchetype(const std::string& name) const
 		{
 			return (mPoseArchetypes.find(name) != mPoseArchetypes.cend());
-			//std::map<std::string, ci::gl::TextureRef>	mPoseArchetypes;
 		}
 
 		ci::gl::TextureRef getPoseArchetype(const std::string& name) const
@@ -608,6 +624,21 @@ namespace itp { namespace multitrack {
 				return true;
 			}
 			return false;
+		}
+
+		foil::gesture::Result guessGesture()
+		{
+			// Check whether recognizer has templates:
+			if (mRecognizer.hasTemplates()) {
+				// Get point cloud:
+				itp::multitrack::PointCloud tCloud = itp::multitrack::PointCloud(mBodyFrame, mDevice);
+				// Check for correct point count for single body:
+				if (tCloud.mPoints.size() == kBodyPointCount) {
+					// Get gesture guess:
+					return mRecognizer.recognizeBest({ tCloud.mPoints });
+				}
+			}
+			return foil::gesture::Result("NONE", 0.0f);
 		}
 
 		bool analyzeGesture(std::string* recognizedGesture)
@@ -887,13 +918,17 @@ namespace itp { namespace multitrack {
 			else if (!mController->hasPoseArchetype("ACTOR")) {
 				mController->setMode("EstablishActorPoseMode");
 			}
+			else if (!mController->hasPoseArchetype("CINEMATOGRAPHER")) {
+				mController->setMode("EstablishCinematographerPoseMode");
+			}
 			else {
 				// Load captions if necessary:
 				if (mCaptions.empty()) {
 					mLabel = "What's next?";
 					mCaptions = {
 						{ mController->getPoseArchetype("CONTROL"), "Start a new movie" },
-						{ mController->getPoseArchetype("ACTOR"), "Add an actor" }
+						{ mController->getPoseArchetype("ACTOR"), "Add an actor" },
+						{ mController->getPoseArchetype("CINEMATOGRAPHER"), "Perform cinematography" },
 					};
 				}
 				// Analyze gesture:
@@ -917,6 +952,15 @@ namespace itp { namespace multitrack {
 							kStateTransitionLong,
 							"You're on in $ seconds.",
 							"PerformActorMode"));
+					}
+					// Check for actor gesture:
+					else if (recognizedGesture == "CINEMATOGRAPHER") {
+						mPreview->stop();
+						mController->setMode(TransitionCardMode::create(
+							mController,
+							kStateTransitionLong,
+							"Shooting in $ seconds.",
+							"PerformCinematographerMode"));
 					}
 				}
 			}
@@ -960,13 +1004,7 @@ namespace itp { namespace multitrack {
 			if (mController->analyzeGesture(&recognizedGesture)) {
 				// Check for control gesture:
 				if (recognizedGesture == "CONTROL") {
-					mRecorder->stop();
-					mController->addTrackGroup(mRecorder);
-					mController->setMode(TransitionCardMode::create(
-						mController,
-						kStateTransitionLong,
-						"I see you're an actor and a director. We'll be back in $ seconds.",
-						"HomeMode"));
+					complete();
 				}
 			}
 			else {
@@ -984,14 +1022,189 @@ namespace itp { namespace multitrack {
 		void onEvent(const std::string& str) 
 		{ 
 			if ("LOOP" == str) {
-				mRecorder->stop();
-				mController->addTrackGroup(mRecorder);
-				mController->setMode(TransitionCardMode::create(
-					mController,
-					kStateTransitionLong,
-					"Cut! We'll be back in $ seconds.",
-					"HomeMode"));
+				complete();
 			}
+		}
+
+		void complete()
+		{
+			mRecorder->stop();
+			mController->addTrackGroup(mRecorder);
+			mController->setMode(TransitionCardMode::create(
+				mController,
+				kStateTransitionLong,
+				"Cut! We'll be back in $ seconds.",
+				"HomeMode"));
+		}
+	};
+
+	class PerformCinematographerMode : public Mode {
+	private:
+
+		enum Submode
+		{
+			WAIT_FOR_NEW_MARKER,
+			CHOOSE_IMAGE
+		};
+
+		struct ItemInfo
+		{
+			typedef std::deque<ItemInfo> Deque;
+
+			double			mTime;
+			ci::fs::path	mPath;
+		};
+
+		Track::Group::Ref					mPreview;
+		ItemInfo::Deque						mInfoDeque;
+		Submode								mSubmode;
+		std::vector<ci::gl::TextureRef>		mBackgroundImages;
+		size_t								mSelectionCurr;
+		size_t								mSelectionFrames;
+
+		PerformCinematographerMode(const Controller::Ref& controller) :
+			Mode(controller, ci::Font("Helvetica", 40), ""),
+			mPreview(mController->createTrackSilhouette("PREVIEW")),
+			mSubmode(Submode::WAIT_FOR_NEW_MARKER),
+			mSelectionCurr(SIZE_MAX)
+		{
+			// Load background images:
+			const std::vector<ci::fs::path>& imagePaths = mController->getBackgroundImagePaths();
+			for (const auto& imagePath : imagePaths) {
+				mBackgroundImages.push_back(ci::gl::Texture::create(ci::Surface(loadImage(imagePath))));
+			}
+			// Start sequence:
+			mController->startSequence();
+		}
+
+	public:
+
+		static Mode::Ref create(const Controller::Ref& controller)
+		{
+			return Mode::Ref(new PerformCinematographerMode(controller));
+		}
+
+		void update()
+		{
+			mController->updateSequence();
+			mPreview->update();
+			if (mController->getActiveBodyCount() != 1) {
+				mPreview->stop();
+				mController->setMode("WaitForUserMode");
+
+				// TODO: need to cancel out????
+			}
+			else {
+				switch (mSubmode) {
+					case Submode::WAIT_FOR_NEW_MARKER: {
+						mLabel = "Perform CONTROL pose to add shot at " + std::to_string(mController->getTimer()->getPlayhead()) + " seconds";
+						// Guess gesture:
+						foil::gesture::Result bestResult = mController->guessGesture();
+						// Check threshold:
+						if (bestResult.mScore >= kRecognitionThreshold) {
+							if ("CONTROL" == bestResult.mName) {
+								mInfoDeque.push_back({ mController->getTimer()->getPlayhead(), "" });
+								mController->stopSequence();
+								mSelectionFrames = 0;
+								mSubmode = Submode::CHOOSE_IMAGE;
+							}
+						}
+						break;
+					}
+					case Submode::CHOOSE_IMAGE: {
+						std::vector<Kinect2::Body> bodies = mController->getBodyFrame().getBodies();
+						if (!bodies.empty()) {
+							for (const Kinect2::Body& body : bodies) {
+								if (body.isTracked()) {
+									ci::vec3 posRaw = body.getJointMap().at(JointType_HandRight).getPosition();
+									ci::ivec2 pos = mController->getKinect()->mapCameraToColor(posRaw);
+									size_t selectionCurr = static_cast<size_t>(ci::lmap<float>(static_cast<float>(pos.x), 0.0f, static_cast<float>(getWindowWidth()), 0.0f, static_cast<float>(mBackgroundImages.size())));
+									if (mSelectionCurr == selectionCurr) {
+										if (mSelectionFrames == kSelectItemFramesMin) {
+											// Set path:
+											mInfoDeque.back().mPath = mController->getBackgroundImagePaths()[mSelectionCurr];
+											// Restart sequence and process:
+											mSelectionFrames = 0;
+											mSelectionCurr = SIZE_MAX;
+											mSubmode = Submode::WAIT_FOR_NEW_MARKER;
+											mController->startSequence();
+										}
+										else {
+											mSelectionFrames++;
+										}
+									}
+									else {
+										mSelectionFrames = 0;
+										mSelectionCurr = selectionCurr;
+									}
+									break;
+								}
+							}
+						}
+						mLabel = "Please hold your RIGHT HAND over a shot location";
+						break;
+					}
+					default: {
+						mLabel = std::to_string(mController->getTimer()->getPlayhead());
+						break;
+					}
+				}
+			}
+		}
+
+		void draw()
+		{
+			mController->drawSequence();
+			mPreview->draw();
+			ci::gl::drawStringCentered(mLabel, vec2(getWindowWidth() * 0.5f, getWindowHeight() - 100.0f), Color(1, 1, 1), mFont);
+			switch (mSubmode) {
+				case Submode::CHOOSE_IMAGE: {
+					float itemX = 0.0f;
+					size_t imgCount = mBackgroundImages.size();
+					float itemWidth = static_cast<float>(getWindowWidth()) / static_cast<float>(imgCount);
+					float completeRatio = static_cast<float>(mSelectionFrames) / static_cast<float>(kSelectItemFramesMin);
+					for (size_t i = 0; i < imgCount; i++) {
+						float itemHeight = itemWidth / mBackgroundImages[i]->getAspectRatio();
+						float itemY = (getWindowHeight() - itemHeight) * 0.5f;
+						if (mSelectionCurr != SIZE_MAX) {
+							gl::color(1.0, 1.0, 1.0, 0.0);
+						}
+						if (i == mSelectionCurr) {
+							gl::color(1.0, 1.0, 1.0, 0.5 + completeRatio * 0.5);
+						}
+						else  {
+							gl::color(1.0, 1.0, 1.0, 0.5 - completeRatio * 0.5);
+						}
+						gl::draw(mBackgroundImages[i], ci::Rectf(itemX, itemY, itemX + itemWidth, itemY + itemHeight));
+						itemX += itemWidth;
+					}
+					break;
+				}
+				default: {
+					break;
+				}
+			}
+		}
+
+		void onEvent(const std::string& str)
+		{
+			if ("LOOP" == str) {
+				complete();
+			}
+		}
+
+		void complete()
+		{
+			// TODO: dont forget that we need to sort mInfoDeque by time before exporting it!
+
+			mPreview->stop();
+			// TODO
+			//mController->addTrackGroup(mPreview);
+			mController->setMode(TransitionCardMode::create(
+				mController,
+				kStateTransitionLong,
+				"Cut! We'll be back in $ seconds.",
+				"HomeMode"));
 		}
 	};
 
@@ -1012,8 +1225,14 @@ namespace itp { namespace multitrack {
 		else if ("EstablishActorPoseMode" == name) {
 			mModeNext = EstablishPoseMode::create(getRef(), "ACTOR");
 		}
+		else if ("EstablishCinematographerPoseMode" == name) {
+			mModeNext = EstablishPoseMode::create(getRef(), "CINEMATOGRAPHER");
+		}
 		else if ("PerformActorMode" == name) {
 			mModeNext = PerformActorMode::create(getRef());
+		}
+		else if ("PerformCinematographerMode" == name) {
+			mModeNext = PerformCinematographerMode::create(getRef());
 		}
 		else {
 			mModeNext.reset();
