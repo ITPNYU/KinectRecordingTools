@@ -55,8 +55,29 @@ struct CaptionImage
 
 	ci::gl::TextureRef	mTex;
 	std::string			mMsg;
-	ci::vec2			mDim;
 };
+
+static inline void drawCaption(const CaptionImage& caption, const ci::vec2& dimension, const ci::Font& font)
+{
+	Rectf rect = Rectf(vec2(0.0, 0.0), dimension);
+	gl::color(1, 1, 1);
+	gl::drawSolidRect(rect);
+	gl::draw(caption.mTex, rect);
+	gl::drawString(caption.mMsg, vec2(dimension.x + 20.0, dimension.y * 0.5), Color(1, 1, 1), font);
+}
+
+static inline void drawCaptions(const CaptionImage::Deque& captions, const ci::vec2& dimension, const ci::Font& font)
+{
+	float padding = 5.0;
+	vec2 offset(0.0, 0.0);
+	for (const auto& caption : captions) {
+		gl::pushMatrices();
+		gl::translate(offset);
+		drawCaption(caption,dimension,font);
+		gl::popMatrices();
+		offset.y += dimension.y + padding;
+	}
+}
 
 
 /*
@@ -65,7 +86,7 @@ template <typename T> void addPlayer(const std::string name, std::function<void(
 {
 Group::Ref group = Group::create(name);
 // Create typed track:
-typename TrackT<T>::Ref tTrack = TrackT<T>::create(mDirectory, "track_" + std::to_string(mUidGenerator), mTimer);
+typename TrackT<T>::Ref tTrack = TrackT<T>::create(mDirectory, "track_silhouette_" + std::to_string(mUidGenerator), mTimer);
 // Add track to group:
 mSequence.mTracks.push_back(tTrack);
 // Initialize recorder:
@@ -76,6 +97,14 @@ mUidGenerator++;
 */
 
 namespace itp { namespace multitrack {
+
+	static inline std::string findAndReplace(const std::string& str, const std::string& toRemove, const std::string& toInsert)
+	{
+		std::string s = str;
+		size_t pos = s.find(toRemove);
+		if (pos == std::string::npos) return s;
+		return s.replace(pos, toRemove.length(), toInsert);
+	}
 
 	/** @brief abstract base class for mode types */
 	class Mode : public std::enable_shared_from_this<Mode> {
@@ -90,13 +119,14 @@ namespace itp { namespace multitrack {
 
 		ControllerRef		mController;		//!< internal reference to the controller
 
-		bool				mInTransition;		//!< transition flag
-		ci::Anim<float>		mTransitionAnim;	//!< transition helper
+		ci::Font			mFont;				//!< primary font
+		std::string			mLabel;				//!< primary label
 
 		/** @brief default constructor */
-		Mode(const ControllerRef& controller) :
+		Mode(const ControllerRef& controller, const ci::Font& font = ci::Font("Helvetica", 40), const std::string& label = "") :
 			mController(controller),
-			mInTransition(false)
+			mFont(font),
+			mLabel(label)
 		{ /* no-op */ }
 
 	public:
@@ -128,20 +158,14 @@ namespace itp { namespace multitrack {
 			return std::dynamic_pointer_cast<T>(shared_from_this());
 		}
 
-		/** @brief returns true if in transition */
-		const bool& inTransition() const { return mInTransition; }
-
-		/** @brief sets transition flag to true */
-		void beginTransition() { mInTransition = true; }
-
-		/** @brief sets transition flag to false */
-		void endTransition() { mInTransition = false; }
-
 		/** @brief pure virtual update method */
 		virtual void update() = 0;
 
 		/** @brief pure virtual draw method */
 		virtual void draw() = 0;
+
+		/** @brief overloadable event method */
+		virtual void onEvent(const std::string& str) { /* no-op */ }
 	};
 
 	/** @brief controller */
@@ -152,15 +176,6 @@ namespace itp { namespace multitrack {
 		typedef std::shared_ptr<const Controller>	ConstRef;
 
 	private:
-
-		Timer::Ref					mTimer;
-		ci::fs::path				mDirectory;
-
-		Track::Group::RefDeque		mSequence;
-		Track::Group::Ref			mCursor;
-
-		Mode::Ref					mMode;
-
 
 		long long									mTimeStamp;
 		long long									mTimeStampPrev;
@@ -182,31 +197,24 @@ namespace itp { namespace multitrack {
 		ci::gl::TextureRef							mTextureLookup;
 		ci::gl::FboRef								mSilhouetteFbo;
 
-		size_t										mUidGenerator;
+		size_t										mUidCounter;
 
-		std::string									mInfoLabel;
-		AppState									mAppState;
 		size_t										mActiveBodyCount;
 
-		bool										mInStateTransition;
-		ci::Anim<float>								mTransitionAnim; //deprecated
-
 		std::map<std::string, ci::gl::TextureRef>	mPoseArchetypes;
-
-		bool										mEstablishedPoseIdle;
-		bool										mEstablishedPoseControl;
-		bool										mEstablishedPoseActor;
-
-		ci::gl::TextureRef							mTexturePoseIdle;
-		ci::gl::TextureRef							mTexturePoseControl;
-		ci::gl::TextureRef							mTexturePoseActor;
-
-		CaptionImage::Deque							mActiveCaptions;
 
 		foil::gesture::Recognizer					mRecognizer;
 		foil::gesture::Result::Deque				mRecognizerBuffer;
 
 		std::vector<ci::fs::path>					mBackgroundImgPaths;
+
+		Timer::Ref									mTimer;
+		ci::fs::path								mDirectory;
+
+		Track::Group::RefDeque						mSequence;
+
+		Mode::Ref									mModeCurr;
+		Mode::Ref									mModeNext;
 
 		/** @brief default constructor */
 		Controller() { /* no-op */ }
@@ -265,20 +273,15 @@ namespace itp { namespace multitrack {
 			}
 			// Set scratch directory:
 			mDirectory = getHomeDirectory() / "Desktop" / "Tests";
-			mUidGenerator = 0;
+			mUidCounter = 0;
 			// Create timer:
 			mTimer = itp::multitrack::Timer::create();
 			mTimer->setLoopCallback(std::bind(&Controller::receiveLoopCallback, this));
 			mTimer->setLoopMarker(kSceneDurationSec);
-			mTimer->start();
-			// Initialize application state:
-			mInfoLabel = "";
-			mAppState = AppState::NONE;
+			// Initialize body count:
 			mActiveBodyCount = 0;
-			mInStateTransition = false;
-			mEstablishedPoseIdle = false;
-			mEstablishedPoseControl = false;
-			mEstablishedPoseActor = false;
+			// Create initial movie:
+			startNewMovie();
 			// Set initial mode:
 			setMode("WaitForUserMode");
 		}
@@ -325,6 +328,13 @@ namespace itp { namespace multitrack {
 			return mSilhouetteFbo;
 		}
 
+		size_t getNextUid()
+		{
+			size_t t = mUidCounter;
+			mUidCounter++;
+			return t;
+		}
+
 		bool hasPoseArchetype(const std::string& name) const
 		{
 			return (mPoseArchetypes.find(name) != mPoseArchetypes.cend());
@@ -341,6 +351,11 @@ namespace itp { namespace multitrack {
 		void setPoseArchetype(const std::string& name, const ci::gl::TextureRef& pose)
 		{
 			mPoseArchetypes[name] = pose;
+		}
+
+		void setMode(const Mode::Ref& mode)
+		{
+			mModeNext = mode;
 		}
 
 		void setMode(const std::string& name);
@@ -373,8 +388,13 @@ namespace itp { namespace multitrack {
 			}
 			// Update timer:
 			mTimer->update();
+			// Goto next mode, if applicable:
+			if (mModeNext) {
+				mModeCurr = mModeNext;
+				mModeNext.reset();
+			}
 			// Update mode:
-			if (mMode) mMode->update();
+			if (mModeCurr) mModeCurr->update();
 		}
 
 		/** @brief draw method */
@@ -385,73 +405,53 @@ namespace itp { namespace multitrack {
 			gl::setMatricesWindow(getWindowSize());
 			ci::gl::color(1.0, 1.0, 1.0, 1.0);
 			// Draw mode:
-			if (mMode) mMode->draw();
+			if (mModeCurr) mModeCurr->draw();
+		}
 
+		/** @brief update sequence method */
+		void updateSequence()
+		{
+			for (auto& curr : mSequence) {
+				curr->update();
+			}
+		}
 
-			// TODO
-			/*
-			// Draw sequence:
+		/** @brief draw sequence method */
+		void drawSequence()
+		{
 			for (auto& curr : mSequence) {
 				curr->draw();
 			}
-			// Draw active captions:
-			if (!mActiveCaptions.empty()) {
-				drawCaptions(mActiveCaptions);
+		}
+
+		/** @brief start sequence method */
+		void startSequence()
+		{
+			mTimer->start();
+			for (auto& curr : mSequence) {
+				curr->start();
 			}
-			// Draw info:
-			if (!mInfoLabel.empty())
-				gl::drawStringCentered(mInfoLabel, vec2(getWindowWidth() * 0.5f, getWindowHeight() - 100.0f), Color(1, 1, 1), mFont);
-			// Draw time:
-			if (mAppState == AppState::RECORD_ACTOR) {
-				const double& playhead = mTimer->getPlayhead();
-				if (playhead >= 0.0) {
-					gl::drawString(std::to_string(playhead), vec2(25, 25), Color(1, 1, 1), mFont);
-				}
+		}
+
+		/** @brief stop sequence method */
+		void stopSequence()
+		{
+			mTimer->stop();
+			for (auto& curr : mSequence) {
+				curr->stop();
 			}
-			*/
 		}
 
-		// TODO:
-		void transitionToState(AppState targetState, float transitionDuration, const std::string& updateMsg)
-		{
-			mTransitionAnim = transitionDuration;
-			ci::app::timeline().apply(&mTransitionAnim, 0.0f, transitionDuration, EaseNone())
-				.startFn(std::bind(&Controller::startStateTransition, this))
-				.updateFn(std::bind(&Controller::updateStateTransition, this, updateMsg))
-				.finishFn(std::bind(&Controller::finishStateTransition, this, targetState))
-				;
-		}
-
-		void startStateTransition()
-		{
-			mInStateTransition = true;
-		}
-
-		void updateStateTransition(const std::string& updateMsg)
-		{
-			mInfoLabel = updateMsg + std::to_string(static_cast<int>(mTransitionAnim)) + " seconds";
-		}
-
-		void finishStateTransition(AppState targetState)
-		{
-			mAppState = targetState;
-			mInStateTransition = false;
-		}
-
+		/** @brief loop callback method */
 		void receiveLoopCallback()
 		{
-			switch (mAppState) {
-			case AppState::RECORD_ACTOR: {
-				// Complete track:
-				completeTrack();
-				// Return to home state:
-				transitionToState(AppState::HOME, kStateTransitionShort, "Cut! We'll be back in ");
-				break;
-			}
-			default: { break; }
+			// Notify mode:
+			if (mModeCurr) {
+				mModeCurr->onEvent("LOOP");
 			}
 		}
 
+		/** @brief clears current sequence and begins new one */
 		void startNewMovie()
 		{
 			// Stop timer:
@@ -459,19 +459,15 @@ namespace itp { namespace multitrack {
 			// Clear current sequence:
 			mSequence.clear();
 			// Reset id counter:
-			mUidGenerator = 0;
-			// Add background track:
-			addBackgroundTrack();
-			// Add user track:
-			addTrack();
+			mUidCounter = 0;
 		}
 
 		void addBackgroundTrack()
 		{
 			// Get paths:
 			ci::fs::path rootDir = getHomeDirectory() / "Desktop" / "Tests";
-			ci::fs::path currDir = rootDir / ("track_" + std::to_string(mUidGenerator));
-			ci::fs::path infoPth = rootDir / ("track_" + std::to_string(mUidGenerator) + "_info.txt");
+			ci::fs::path currDir = rootDir / ("track_silhouette_" + std::to_string(mUidCounter));
+			ci::fs::path infoPth = rootDir / ("track_silhouette_" + std::to_string(mUidCounter) + "_info.txt");
 			// Check if directory already exists:
 			if (ci::fs::exists(currDir)) {
 				// If path exists but is not a directory, throw:
@@ -533,7 +529,7 @@ namespace itp { namespace multitrack {
 		Track::Group::Ref createTrackSilhouette(const std::string& name)
 		{
 			// Create group:
-			Track::Group::Ref tGroup = Track::Group::create(name);
+			Track::Group::Ref tGroup = Track::Group::create(name + "_group");
 			// Create image recorder callback lambda:
 			auto tImgRecorderCallbackFn = [&](void) -> ci::SurfaceRef
 			{
@@ -552,7 +548,7 @@ namespace itp { namespace multitrack {
 			// Create typed track:
 			itp::multitrack::Track::Ref tTrack = itp::multitrack::TrackT<ci::SurfaceRef>::create(
 				mDirectory,
-				"track_" + std::to_string(mUidGenerator),
+				name,
 				mTimer,
 				tImgRecorderCallbackFn,
 				tImgPlayerCallbackFn);
@@ -562,78 +558,41 @@ namespace itp { namespace multitrack {
 			tGroup->pushTop(tTrack);
 			// Return output:
 			return tGroup;
-		}
 
-		void addTrack()
-		{
-			// TODO deprecated????
-
-			// Create group:
-			mCursor = itp::multitrack::Track::Group::create("group_" + std::to_string(mUidGenerator)); // TODO: need separate UID for groups...
-			// Create image recorder callback lambda:
-			auto tImgRecorderCallbackFn = [&](void) -> ci::SurfaceRef
-			{
-				renderSilhouetteGpu();
-				return std::make_shared<Surface8u>(mSilhouetteFbo->readPixels8u(mSilhouetteFbo->getBounds()));
-			};
-			// Create image player callback lambda:
-			auto tImgPlayerCallbackFn = [&](const ci::SurfaceRef& iSurface) -> void
-			{
-				if (iSurface.get() == NULL) return;
-				gl::enable(GL_TEXTURE_2D);
-				ci::gl::TextureRef tex = ci::gl::Texture::create(*(iSurface.get()));
-				ci::Rectf rect = ci::Rectf(0, 0, kRawFrameWidth, kRawFrameHeight).getCenteredFit(getWindowBounds(), true);
-				ci::gl::draw(tex, rect);
-			};
-			// Create typed track:
-			itp::multitrack::Track::Ref tTrack = itp::multitrack::TrackT<ci::SurfaceRef>::create(
-				mDirectory,
-				"track_" + std::to_string(mUidGenerator),
-				mTimer,
-				tImgRecorderCallbackFn,
-				tImgPlayerCallbackFn);
-			// Initialize recorder:
-			tTrack->gotoRecordMode();
-			// Add track to group:
-			mCursor->pushTop(tTrack);
-			// Increment uid generator:
-			mUidGenerator++;
-			/*
+			/* // TODO: for skeleton recording...
 			// Create body recorder callback lambda:
 			auto tBodyRecorderCallbackFn = [&](void) -> itp::multitrack::PointCloudRef
 			{
-			return std::make_shared<itp::multitrack::PointCloud>(itp::multitrack::PointCloud(mBodyFrame, mDevice));
+				return std::make_shared<itp::multitrack::PointCloud>(itp::multitrack::PointCloud(mBodyFrame, mDevice));
 			};
 			// Create body player callback lambda:
 			auto tBodyPlayerCallbackFn = [&](const itp::multitrack::PointCloudRef& iFrame) -> void
 			{
-			if (iFrame.get() == NULL || mChannelBody.get() == NULL) return;
-			gl::ScopedMatrices scopeMatrices;
-			gl::scale(vec2(getWindowSize()) / vec2(mChannelBody->getSize()));
-			gl::disable(GL_TEXTURE_2D);
-			gl::color(ColorAf::white());
-			for (const auto& pt : iFrame->mPoints) {
-			gl::drawSolidCircle(pt, 3.0f, 10);
-			}
+				if (iFrame.get() == NULL || mChannelBody.get() == NULL) return;
+				gl::ScopedMatrices scopeMatrices;
+				gl::scale(vec2(getWindowSize()) / vec2(mChannelBody->getSize()));
+				gl::disable(GL_TEXTURE_2D);
+				gl::color(ColorAf::white());
+				for (const auto& pt : iFrame->mPoints) {
+					gl::drawSolidCircle(pt, 3.0f, 10);
+				}
 			};
 			// Create body recorder track:
 			mMultitrackController->addRecorder<itp::multitrack::PointCloudRef>(tBodyRecorderCallbackFn, tBodyPlayerCallbackFn);
 			*/
 		}
 
-		void completeTrack()
+		void addTrackGroup(const Track::Group::Ref& group)
 		{
-			// Check active cursor:
-			if (mCursor) {
-				// Check cursor framecount:
-				if (mCursor->getFrameCount() > 0) {
-					// Add cursor to sequence:
-					mSequence.push_back(mCursor);
-					// Set cursor to play mode:
-					mCursor->gotoPlayMode();
+			// Check validity:
+			if (group) {
+				// Check framecount:
+				if (group->getFrameCount() > 0) {
+					// Add to sequence:
+					mSequence.push_back(group);
+					// Set to play mode:
+					group->gotoPlayMode();
 				}
-				// Reset cursor:
-				mCursor.reset();
 				// Stop timer:
 				mTimer->stop();
 			}
@@ -765,16 +724,103 @@ namespace itp { namespace multitrack {
 		}
 	};
 
+
+	class TransitionCardMode : public Mode {
+	private:
+
+		double			mStart;
+		double			mDuration;
+		std::string		mMessage;
+		std::string		mTargetMode;
+
+		TransitionCardMode(const Controller::Ref& controller, double duration, const std::string& msg, const std::string& targetMode) :
+			Mode(controller, ci::Font("Helvetica", 60), ""),
+			mStart(ci::app::getElapsedSeconds()),
+			mDuration(duration),
+			mMessage(msg),
+			mTargetMode(targetMode)
+		{ /* no-op */ }
+
+	public:
+
+		template <typename ... Args> static Mode::Ref create(Args&& ... args)
+		{
+			return Mode::Ref(new TransitionCardMode(std::forward<Args>(args)...));
+		}
+
+		void update() 
+		{
+			double timeElap = ci::app::getElapsedSeconds() - mStart;
+			if (timeElap >= mDuration) {
+				mController->setMode(mTargetMode);
+			}
+			else {
+				mLabel = findAndReplace(mMessage, "$", std::to_string(static_cast<int>(mDuration - timeElap)));
+			}
+		}
+
+		void draw()
+		{
+			ci::gl::drawStringCentered(mLabel, vec2(getWindowWidth() * 0.5f, getWindowHeight() * 0.5f), Color(1, 1, 1), mFont);
+		}
+	};
+
+	class EstablishPoseMode : public Mode {
+	private:
+
+		double				mStart;
+		std::string			mName;
+		Track::Group::Ref	mPreview;
+
+		EstablishPoseMode(const Controller::Ref& controller, const std::string& name) :
+			Mode(controller, ci::Font("Helvetica", 60), "What's next?"),
+			mName(name),
+			mStart(ci::app::getElapsedSeconds()),
+			mPreview(mController->createTrackSilhouette("Preview"))
+		{ /* no-op */
+		}
+
+	public:
+
+		static Mode::Ref create(const Controller::Ref& controller, const std::string& name)
+		{
+			return Mode::Ref(new EstablishPoseMode(controller, name));
+		}
+
+		void update()
+		{
+			mPreview->update();
+
+			double timeElap = ci::app::getElapsedSeconds() - mStart;
+			double duration = kStateTransitionLong;
+			if (timeElap >= duration) {
+				ci::gl::FboRef fbo = mController->getSilhouetteFbo();
+				if (mController->addGestureTemplate(mName)) {
+					mController->setPoseArchetype(mName, ci::gl::Texture::create(fbo->readPixels8u(fbo->getBounds())));
+				}
+				mPreview->stop();
+				mController->setMode("HomeMode");
+			}
+			else if (mController->getActiveBodyCount() != 1) {
+				mController->setMode("WaitForUserMode");
+			}
+			else {
+				mLabel = "Establishing " + mName + " pose in " + std::to_string(static_cast<int>(duration - timeElap)) + " seconds.";
+			}
+		}
+
+		void draw()
+		{
+			mPreview->draw();
+			ci::gl::drawStringCentered(mLabel, vec2(getWindowWidth() * 0.5f, getWindowHeight() * 0.5f), Color(1, 1, 1), mFont);
+		}
+	};
+
 	class WaitForUserMode : public Mode {
 	private:
 
-		ci::Font		mFont;
-		std::string		mLabel;
-
 		WaitForUserMode(const Controller::Ref& controller) :
-			Mode(controller),
-			mFont(ci::Font("Helvetica", 40)),
-			mLabel("")
+			Mode(controller, ci::Font("Helvetica", 40), "")
 		{ /* no-op */ }
 
 	public:
@@ -786,17 +832,15 @@ namespace itp { namespace multitrack {
 
 		void update()
 		{ 
-			if (inTransition()) return;
-			else if (mController->getActiveBodyCount() != 1) {
+			if (mController->getActiveBodyCount() != 1) {
 				mLabel = "I see " + std::to_string(mController->getActiveBodyCount()) + " users, but need one.";
 			}
 			else {
-				double dur = kStateTransitionShort;
-				mTransitionAnim = dur;
-				ci::app::timeline().apply(&mTransitionAnim, 0.0f, dur, EaseNone())
-					.startFn([&](){ beginTransition(); mLabel = "Oh hello!"; })
-					.finishFn([&](){ endTransition(); mController->setMode("HomeMode"); })
-					;
+				mController->setMode(TransitionCardMode::create(
+					mController,
+					kStateTransitionShort,
+					"Oh hello!",
+					"HomeMode"));
 			}
 		}
 
@@ -809,16 +853,15 @@ namespace itp { namespace multitrack {
 	class HomeMode : public Mode {
 	private:
 
-		ci::Font			mFont;
-		std::string			mLabel;
-		Track::Group::Ref	mPreview;
+		Track::Group::Ref		mPreview;
+		CaptionImage::Deque		mCaptions;
 
 		HomeMode(const Controller::Ref& controller) :
-			Mode(controller),
-			mFont(ci::Font("Helvetica", 40)),
-			mLabel("What's next?"),
-			mPreview(mController->createTrackSilhouette("HomePreview"))
-		{ /* no-op */ }
+			Mode(controller, ci::Font("Helvetica", 40), ""),
+			mPreview(mController->createTrackSilhouette("Preview"))
+		{ 
+			mController->startSequence();
+		}
 
 	public:
 
@@ -829,6 +872,9 @@ namespace itp { namespace multitrack {
 
 		void update()
 		{
+			mController->updateSequence();
+			mPreview->update();
+			
 			if (mController->getActiveBodyCount() != 1) {
 				mController->setMode("WaitForUserMode");
 			}
@@ -842,123 +888,139 @@ namespace itp { namespace multitrack {
 				mController->setMode("EstablishActorPoseMode");
 			}
 			else {
-				mPreview->update();
+				// Load captions if necessary:
+				if (mCaptions.empty()) {
+					mLabel = "What's next?";
+					mCaptions = {
+						{ mController->getPoseArchetype("CONTROL"), "Start a new movie" },
+						{ mController->getPoseArchetype("ACTOR"), "Add an actor" }
+					};
+				}
+				// Analyze gesture:
+				std::string recognizedGesture;
+				if (mController->analyzeGesture(&recognizedGesture)) {
+					// Check for control gesture:
+					if (recognizedGesture == "CONTROL") {
+						mPreview->stop();
+						mController->startNewMovie();
+						mController->setMode(TransitionCardMode::create(
+							mController,
+							kStateTransitionLong,
+							"Starting a new movie in $ seconds.",
+							"HomeMode"));
+					}
+					// Check for actor gesture:
+					else if (recognizedGesture == "ACTOR") {
+						mPreview->stop();
+						mController->setMode(TransitionCardMode::create(
+							mController,
+							kStateTransitionLong,
+							"You're on in $ seconds.",
+							"PerformActorMode"));
+					}
+				}
 			}
 		}
 
 		void draw()
 		{
+			mController->drawSequence();
 			mPreview->draw();
 			ci::gl::drawStringCentered(mLabel, vec2(getWindowWidth() * 0.5f, getWindowHeight() - 100.0f), Color(1, 1, 1), mFont);
-		}
-
-		void drawCaption(const CaptionImage& caption)
-		{
-			Rectf rect = Rectf(vec2(0.0, 0.0), caption.mDim);
-			gl::color(1, 1, 1);
-			gl::drawSolidRect(rect);
-			gl::draw(caption.mTex, rect);
-			gl::drawString(caption.mMsg, vec2(caption.mDim.x + 20.0, caption.mDim.y * 0.5), Color(1, 1, 1), mFont);
-		}
-
-		void drawCaptions(const CaptionImage::Deque& captions)
-		{
-			float padding = 5.0; // TODO: externalize
-
-			vec2 offset(0.0, 0.0);
-			for (const auto& caption : captions) {
-				gl::pushMatrices();
-				gl::translate(offset);
-				drawCaption(caption);
-				gl::popMatrices();
-				offset.y += caption.mDim.y + padding;
-			}
+			if (!mCaptions.empty()) drawCaptions(mCaptions, vec2(240, 135), mFont);
 		}
 	};
 
-	class EstablishPoseMode : public Mode {
+	class PerformActorMode : public Mode {
 	private:
 
-		std::string			mName;
-		ci::Font			mFont;
-		std::string			mLabel;
-		Track::Group::Ref	mPreview;
+		Track::Group::Ref	mRecorder;
 
-		EstablishPoseMode(const Controller::Ref& controller, const std::string& name) :
-			Mode(controller),
-			mName(name),
-			mFont(ci::Font("Helvetica", 60)),
-			mLabel("What's next?"),
-			mPreview(mController->createTrackSilhouette("Establish" + name))
-		{ /* no-op */ }
+		PerformActorMode(const Controller::Ref& controller) :
+			Mode(controller, ci::Font("Helvetica", 40), ""),
+			mRecorder(mController->createTrackSilhouette("track_silhouette_" + std::to_string(mController->getNextUid())))
+		{ 
+			mController->startSequence();
+			mRecorder->start();
+		}
 
 	public:
 
-		static Mode::Ref create(const Controller::Ref& controller, const std::string& name)
+		static Mode::Ref create(const Controller::Ref& controller)
 		{
-			return Mode::Ref(new EstablishPoseMode(controller, name));
+			return Mode::Ref(new PerformActorMode(controller));
 		}
 
 		void update()
 		{
-			mPreview->update();
-		    if (mController->getActiveBodyCount() != 1) {
-				mController->setMode("WaitForUserMode");
-			}
-			else if (inTransition()) {
-				return;
+			mController->updateSequence();
+			mRecorder->update();
+			// Analyze gesture:
+			std::string recognizedGesture;
+			if (mController->analyzeGesture(&recognizedGesture)) {
+				// Check for control gesture:
+				if (recognizedGesture == "CONTROL") {
+					mRecorder->stop();
+					mController->addTrackGroup(mRecorder);
+					mController->setMode(TransitionCardMode::create(
+						mController,
+						kStateTransitionLong,
+						"I see you're an actor and a director. We'll be back in $ seconds.",
+						"HomeMode"));
+				}
 			}
 			else {
-				double dur = kStateTransitionLong;
-				mTransitionAnim = dur;
-				ci::app::timeline().apply(&mTransitionAnim, 0.0f, dur, EaseNone())
-					.startFn([&](){ beginTransition(); })
-					.updateFn([&](){ mLabel = "Establishing " + mName + " pose in " + std::to_string((int)mTransitionAnim) + " seconds"; })
-					.finishFn([&](){
-						endTransition();
-						ci::gl::FboRef fbo = mController->getSilhouetteFbo();
-						if (mController->addGestureTemplate(mName)) {
-							mController->setPoseArchetype(mName, ci::gl::Texture::create(fbo->readPixels8u(fbo->getBounds())));
-						}
-						mController->setMode("HomeMode");
-					})
-					;
+				mLabel = std::to_string(mController->getTimer()->getPlayhead());
 			}
 		}
 
 		void draw()
 		{
-			mPreview->draw();
-			ci::gl::drawStringCentered(mLabel, vec2(getWindowWidth() * 0.5f, getWindowHeight() * 0.5f), Color(1, 1, 1), mFont);
+			mController->drawSequence();
+			mRecorder->draw();
+			ci::gl::drawStringCentered(mLabel, vec2(getWindowWidth() * 0.5f, getWindowHeight() - 100.0f), Color(1, 1, 1), mFont);
+		}
+
+		void onEvent(const std::string& str) 
+		{ 
+			if ("LOOP" == str) {
+				mRecorder->stop();
+				mController->addTrackGroup(mRecorder);
+				mController->setMode(TransitionCardMode::create(
+					mController,
+					kStateTransitionLong,
+					"Cut! We'll be back in $ seconds.",
+					"HomeMode"));
+			}
 		}
 	};
 
 	void Controller::setMode(const std::string& name)
 	{
 		if ("WaitForUserMode" == name) {
-			mMode = WaitForUserMode::create(getRef());
+			mModeNext = WaitForUserMode::create(getRef());
 		}
 		else if ("HomeMode" == name) {
-			mMode = HomeMode::create(getRef());
+			mModeNext = HomeMode::create(getRef());
 		}
 		else if ("EstablishIdlePoseMode" == name) {
-			mMode = EstablishPoseMode::create(getRef(),"IDLE");
+			mModeNext = EstablishPoseMode::create(getRef(), "IDLE");
 		}
 		else if ("EstablishControlPoseMode" == name) {
-			mMode = EstablishPoseMode::create(getRef(), "CONTROL");
+			mModeNext = EstablishPoseMode::create(getRef(), "CONTROL");
 		}
 		else if ("EstablishActorPoseMode" == name) {
-			mMode = EstablishPoseMode::create(getRef(), "ACTOR");
+			mModeNext = EstablishPoseMode::create(getRef(), "ACTOR");
+		}
+		else if ("PerformActorMode" == name) {
+			mModeNext = PerformActorMode::create(getRef());
 		}
 		else {
-			mMode.reset();
+			mModeNext.reset();
 		}
 	}
 
 } } // namespace itp::multitrack
-
-
-
 
 class HelloKinectMultitrackGestureApp : public App {
 public:
@@ -984,109 +1046,6 @@ void HelloKinectMultitrackGestureApp::setup()
 void HelloKinectMultitrackGestureApp::update()
 {
 	mController->update();
-
-
-	// TODO
-
-	/*
-	// If in state transition, block new transitions:
-	if (!mInStateTransition) {
-		// Handle states:
-		if (mActiveBodyCount != 1 && mAppState != AppState::RECORD_ACTOR) {
-			if (mAppState != AppState::WAIT_FOR_SINGLE_USER) {
-				mAppState = AppState::WAIT_FOR_SINGLE_USER;
-				mActiveCaptions.clear();
-			}
-			mInfoLabel = "I see " + std::to_string(mActiveBodyCount) + " users, but need one.";
-		}
-		else if (mAppState == AppState::WAIT_FOR_SINGLE_USER) {
-			transitionToState(AppState::HOME, kStateTransitionMedium, "Oh hello! We'll get started in ");
-		}
-		else if (mAppState == AppState::HOME) {
-			if (!mEstablishedPoseIdle) {
-				transitionToState(AppState::ESTABLISH_IDLE_POSE, kStateTransitionLong, "Establishing IDLE POSE in ");
-			}
-			else if (!mEstablishedPoseControl) {
-				transitionToState(AppState::ESTABLISH_CONTROL_POSE, kStateTransitionLong, "Establishing CONTROL POSE in ");
-			}
-			else if (!mEstablishedPoseActor) {
-				transitionToState(AppState::ESTABLISH_ACTOR_POSE, kStateTransitionLong, "Establishing ACTOR POSE in ");
-			}
-			else {
-				addTrack();
-				mTimer->start();
-				mAppState = AppState::CHOOSE_ACTIVITY;
-				mInfoLabel = "What's next?";
-				mActiveCaptions = {
-					{ mTexturePoseControl, "Start a new movie", vec2(240, 135) },
-					{ mTexturePoseActor, "Add an actor", vec2(240, 135) }
-				};
-			}
-		}
-		else if (mAppState == AppState::CHOOSE_ACTIVITY) {
-			// Analyze gesture:
-			std::string recognizedGesture;
-			if (analyzeGesture(&recognizedGesture)) {
-				// Check for control gesture:
-				if (recognizedGesture == "CONTROL") {
-					mActiveCaptions.clear();
-					startNewMovie();
-					transitionToState(AppState::HOME, kStateTransitionMedium, "Starting a new movie in ");
-				}
-				// Check for actor gesture:
-				else if (recognizedGesture == "ACTOR") {
-					mActiveCaptions.clear();
-					mTimer->stop();
-					transitionToState(AppState::BEGIN_ACTOR, kStateTransitionLong, "You're on in ");
-				}
-			}
-		}
-		else if (mAppState == AppState::ESTABLISH_IDLE_POSE) {
-			if (addGestureTemplate("IDLE")) {
-				mTexturePoseIdle = ci::gl::Texture::create(mSilhouetteFbo->readPixels8u(mSilhouetteFbo->getBounds()));
-				mEstablishedPoseIdle = true;
-			}
-			transitionToState(AppState::HOME, kStateTransitionShort, "Thanks! We'll be back in ");
-		}
-		else if (mAppState == AppState::ESTABLISH_CONTROL_POSE) {
-			if (addGestureTemplate("CONTROL")) {
-				mTexturePoseControl = ci::gl::Texture::create(mSilhouetteFbo->readPixels8u(mSilhouetteFbo->getBounds()));
-				mEstablishedPoseControl = true;
-			}
-			transitionToState(AppState::HOME, kStateTransitionShort, "Thanks! We'll be back in ");
-		}
-		else if (mAppState == AppState::ESTABLISH_ACTOR_POSE) {
-			if (addGestureTemplate("ACTOR")) {
-				mTexturePoseActor = ci::gl::Texture::create(mSilhouetteFbo->readPixels8u(mSilhouetteFbo->getBounds()));
-				mEstablishedPoseActor = true;
-			}
-			transitionToState(AppState::HOME, kStateTransitionShort, "Thanks! We'll be back in ");
-		}
-		else if (mAppState == AppState::BEGIN_ACTOR) {
-			mTimer->start();
-			mCursor->start();
-			mAppState = AppState::RECORD_ACTOR;
-			mInfoLabel = "";
-		}
-		else if (mAppState == AppState::RECORD_ACTOR) {
-			// Analyze gesture:
-			std::string recognizedGesture;
-			if (analyzeGesture(&recognizedGesture)) {
-				// Check for control gesture:
-				if (recognizedGesture == "CONTROL") {
-					// Complete track:
-					completeTrack();
-					// Return to home state:
-					transitionToState(AppState::HOME, kStateTransitionShort, "I see you're an actor and a director. We'll be back in ");
-				}
-			}
-		}
-	}
-	// Update sequence:
-	for (auto& curr : mSequence) {
-		curr->update();
-	}
-	*/
 }
 
 void HelloKinectMultitrackGestureApp::draw()
