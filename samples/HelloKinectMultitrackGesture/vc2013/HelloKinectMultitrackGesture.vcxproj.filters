@@ -1,3 +1,4 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Source Files">
@@ -13,43 +14,43 @@
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav</Extensions>
     </Filter>
     <Filter Include="Blocks">
-      <UniqueIdentifier>{9C068461-EFFD-4DAF-A514-709B31CCDCD0}</UniqueIdentifier>
+      <UniqueIdentifier>{E7DED2EF-78B7-4C69-B9B4-1D3320D4095F}</UniqueIdentifier>
     </Filter>
     <Filter Include="Blocks\Cinder-KCB2">
-      <UniqueIdentifier>{4CBD5CC4-8C72-4483-9620-86AC51240B5E}</UniqueIdentifier>
+      <UniqueIdentifier>{C4F137B4-239D-40C4-932B-9D1BF1392153}</UniqueIdentifier>
     </Filter>
     <Filter Include="Blocks\Cinder-KCB2\src">
-      <UniqueIdentifier>{6C4CE03D-928B-4B03-A74E-0EA7FCACA9E0}</UniqueIdentifier>
+      <UniqueIdentifier>{3E7BAB19-C6A6-425C-8D4C-C3BC6B54EDE1}</UniqueIdentifier>
     </Filter>
     <Filter Include="Blocks\FoilOSS">
-      <UniqueIdentifier>{33D61D76-5C61-4C9C-93B7-B72E8723388E}</UniqueIdentifier>
+      <UniqueIdentifier>{FB309A18-675D-4023-9460-8A0ED6B880F0}</UniqueIdentifier>
     </Filter>
     <Filter Include="Blocks\FoilOSS\foil">
-      <UniqueIdentifier>{E2C7BAB2-A5B7-48B2-BBEE-7BB6E93F6836}</UniqueIdentifier>
+      <UniqueIdentifier>{6F380CBE-FFD6-400C-A5AC-9DAB678AA06C}</UniqueIdentifier>
     </Filter>
     <Filter Include="Blocks\FoilOSS\foil\include">
-      <UniqueIdentifier>{E47675E3-E56C-45C1-9B0F-87D8ED80489D}</UniqueIdentifier>
+      <UniqueIdentifier>{A37D20B1-8050-438B-A88B-CC652276BBB8}</UniqueIdentifier>
     </Filter>
     <Filter Include="Blocks\FoilOSS\foil\include\foil">
-      <UniqueIdentifier>{A0E58E98-9500-4387-BE24-860DD437B52A}</UniqueIdentifier>
+      <UniqueIdentifier>{3F310830-5970-473E-840D-BEB073F3E387}</UniqueIdentifier>
     </Filter>
     <Filter Include="Blocks\FoilOSS\foil\include\foil\oss">
-      <UniqueIdentifier>{91976455-92F7-484F-A496-0E68620E80AC}</UniqueIdentifier>
+      <UniqueIdentifier>{49DB2B73-756E-4E53-BCED-BCF7FE2989CB}</UniqueIdentifier>
     </Filter>
     <Filter Include="Blocks\FoilOSS\foil\include\foil\oss\gesture">
-      <UniqueIdentifier>{4163C577-DEB6-4149-B36B-450F37973D8F}</UniqueIdentifier>
+      <UniqueIdentifier>{06663EDC-FFB8-4F8D-BBC6-F4760AE004D0}</UniqueIdentifier>
     </Filter>
     <Filter Include="Blocks\KinectRecordingTools">
-      <UniqueIdentifier>{3E8A07A1-DC34-4FA5-85AE-97E788483D5B}</UniqueIdentifier>
+      <UniqueIdentifier>{23A4FC68-4008-4F47-B389-6665319213C7}</UniqueIdentifier>
     </Filter>
     <Filter Include="Blocks\KinectRecordingTools\code">
-      <UniqueIdentifier>{43EECEEC-BC89-4303-ACC1-750518D9A8F8}</UniqueIdentifier>
+      <UniqueIdentifier>{17F0035D-BCA2-4F2C-AD76-A0C9BB301E67}</UniqueIdentifier>
     </Filter>
     <Filter Include="Blocks\KinectRecordingTools\code\include">
-      <UniqueIdentifier>{490949BF-B462-4A21-A291-BA4E3D3933C2}</UniqueIdentifier>
+      <UniqueIdentifier>{ACA29B42-61D9-48E6-B774-9B4991F9EE09}</UniqueIdentifier>
     </Filter>
     <Filter Include="Blocks\KinectRecordingTools\code\include\multitrack">
-      <UniqueIdentifier>{77E45BCB-4139-4989-AD3B-62C2D2B66134}</UniqueIdentifier>
+      <UniqueIdentifier>{AF537627-4D70-4A9C-8556-95BCF375315D}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -83,7 +84,7 @@
     <ClInclude Include="..\..\..\code\include\Projection.h">
       <Filter>Blocks\KinectRecordingTools\code\include</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\code\include\multitrack\Controller.h">
+    <ClInclude Include="..\..\..\code\include\multitrack\Mediator.h">
       <Filter>Blocks\KinectRecordingTools\code\include\multitrack</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\code\include\multitrack\Timer.h">
@@ -92,10 +93,7 @@
     <ClInclude Include="..\..\..\code\include\multitrack\Track.h">
       <Filter>Blocks\KinectRecordingTools\code\include\multitrack</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\code\include\multitrack\TrackGroup.h">
-      <Filter>Blocks\KinectRecordingTools\code\include\multitrack</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\code\include\multitrack\TypeTrack.h">
+    <ClInclude Include="..\..\..\code\include\multitrack\TrackType.h">
       <Filter>Blocks\KinectRecordingTools\code\include\multitrack</Filter>
     </ClInclude>
   </ItemGroup>

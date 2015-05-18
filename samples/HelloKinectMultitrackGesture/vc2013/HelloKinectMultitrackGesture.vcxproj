@@ -1,3 +1,4 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -10,7 +11,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{53161652-69F5-4BA5-9ED7-2B88A124AFE8}</ProjectGuid>
+    <ProjectGuid>{4DE44936-0073-4CCB-8230-982D49B1CE82}</ProjectGuid>
     <RootNamespace>HelloKinectMultitrackGesture</RootNamespace>
     <Keyword>Win32Proj</Keyword>
   </PropertyGroup>
@@ -127,11 +128,10 @@
     <ClInclude Include="..\..\..\..\foil_oss\foil\include\foil\oss\gesture\recognizer_types.hpp" />
     <ClInclude Include="..\..\..\code\include\KinectProcessingGlsl.h" />
     <ClInclude Include="..\..\..\code\include\Projection.h" />
-    <ClInclude Include="..\..\..\code\include\multitrack\Controller.h" />
+    <ClInclude Include="..\..\..\code\include\multitrack\Mediator.h" />
     <ClInclude Include="..\..\..\code\include\multitrack\Timer.h" />
     <ClInclude Include="..\..\..\code\include\multitrack\Track.h" />
-    <ClInclude Include="..\..\..\code\include\multitrack\TrackGroup.h" />
-    <ClInclude Include="..\..\..\code\include\multitrack\TypeTrack.h" />
+    <ClInclude Include="..\..\..\code\include\multitrack\TrackType.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

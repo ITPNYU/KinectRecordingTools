@@ -1,7 +1,7 @@
 
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "HelloKinectMultitrackGesture", "HelloKinectMultitrackGesture.vcxproj", "{53161652-69F5-4BA5-9ED7-2B88A124AFE8}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "HelloKinectMultitrackGesture", "HelloKinectMultitrackGesture.vcxproj", "{4DE44936-0073-4CCB-8230-982D49B1CE82}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -9,10 +9,10 @@ Global
 		Release|Win32 = Release|Win32
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{53161652-69F5-4BA5-9ED7-2B88A124AFE8}.Debug|Win32.ActiveCfg = Debug|Win32
-		{53161652-69F5-4BA5-9ED7-2B88A124AFE8}.Debug|Win32.Build.0 = Debug|Win32
-		{53161652-69F5-4BA5-9ED7-2B88A124AFE8}.Release|Win32.ActiveCfg = Release|Win32
-		{53161652-69F5-4BA5-9ED7-2B88A124AFE8}.Release|Win32.Build.0 = Release|Win32
+		{4DE44936-0073-4CCB-8230-982D49B1CE82}.Debug|Win32.ActiveCfg = Debug|Win32
+		{4DE44936-0073-4CCB-8230-982D49B1CE82}.Debug|Win32.Build.0 = Debug|Win32
+		{4DE44936-0073-4CCB-8230-982D49B1CE82}.Release|Win32.ActiveCfg = Release|Win32
+		{4DE44936-0073-4CCB-8230-982D49B1CE82}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
