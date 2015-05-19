@@ -27,10 +27,7 @@ namespace itp { namespace multitrack {
 			Track::RefDeque	mTracks;	//!< track vector
 
 			/** @brief basic constructor */
-			Group(const std::string& name) :
-				mName(name)
-			{ /* no-op */
-			}
+			Group(const std::string& name) : mName(name) { /* no-op */ }
 
 		public:
 
@@ -45,28 +42,10 @@ namespace itp { namespace multitrack {
 				return mName;
 			}
 
-			/** @brief adds track to bottom of group */
-			void pushBottom(const Track::Ref& track)
-			{
-				mTracks.push_front(track);
-			}
-
 			/** @brief adds track to top of group */
-			void pushTop(const Track::Ref& track)
+			void push(const Track::Ref& track)
 			{
 				mTracks.push_back(track);
-			}
-
-			/** @brief remove bottom track */
-			void popBottom()
-			{
-				mTracks.pop_front();
-			}
-
-			/** @brief remove top track */
-			void popTop()
-			{
-				mTracks.pop_back();
 			}
 
 			/** @brief update method */
@@ -85,19 +64,19 @@ namespace itp { namespace multitrack {
 				}
 			}
 
-			/** @brief start method */
-			void start()
+			/** @brief record-mode method */
+			void gotoRecordMode(bool active)
 			{
 				for (auto& tTrack : mTracks) {
-					tTrack->start();
+					tTrack->gotoRecordMode(active);
 				}
 			}
 
-			/** @brief stop method */
-			void stop()
+			/** @brief play-mode method */
+			void gotoPlayMode()
 			{
 				for (auto& tTrack : mTracks) {
-					tTrack->stop();
+					tTrack->gotoPlayMode();
 				}
 			}
 
@@ -110,22 +89,6 @@ namespace itp { namespace multitrack {
 				}
 				return count;
 			}
-
-			/** @brief record-mode method */
-			void gotoRecordMode()
-			{
-				for (auto& tTrack : mTracks) {
-					tTrack->gotoRecordMode();
-				}
-			}
-
-			/** @brief play-mode method */
-			void gotoPlayMode()
-			{
-				for (auto& tTrack : mTracks) {
-					tTrack->gotoPlayMode();
-				}
-			}
 		};
 
 	protected:
@@ -133,10 +96,7 @@ namespace itp { namespace multitrack {
 		Timer::Ref mTimer;  //!< sequence timer
 
 		/** @brief default constructor */
-		Track(Timer::Ref iTimer) :
-			mTimer(iTimer)
-		{ /* no-op */
-		}
+		Track(Timer::Ref timer) : mTimer(timer) { /* no-op */ }
 
 	public:
 
@@ -164,20 +124,14 @@ namespace itp { namespace multitrack {
 		/** @brief pure virtual draw method */
 		virtual void draw() = 0;
 
-		/** @brief pure virtual start method */
-		virtual void start() = 0;
-
-		/** @brief pure virtual stop method */
-		virtual void stop() = 0;
-
-		/** @brief pure virtual frame-count getter method */
-		virtual size_t getFrameCount() const = 0;
-
 		/** @brief pure virtual record-mode method */
-		virtual void gotoRecordMode() = 0;
+		virtual void gotoRecordMode(bool active) = 0;
 
 		/** @brief pure virtual play-mode method */
 		virtual void gotoPlayMode() = 0;
+
+		/** @brief pure virtual frame-count getter method */
+		virtual size_t getFrameCount() const = 0;
 	};
 
 	/** @brief templated track type */
@@ -213,17 +167,14 @@ namespace itp { namespace multitrack {
 			bool					mInitialized;
 			
 			/** @brief basic constructor */
-			Player(typename TrackT::Ref iTrack, PlayerCallback iPlayerCallback) :
-				mTrack( iTrack ),
-				mPlayerCb( iPlayerCallback ),
+			Player(typename TrackT::Ref track, PlayerCallback playerCb) :
+				mTrack(track),
+				mPlayerCb(playerCb),
 				mInfoVec( FrameInfoVec() ),
 				mKeyTimeCurr( 0.0 ),
 				mKeyTimeNext( 0.0 ),
 				mInitialized( false )
 			{
-				// Clear info container:
-				mInfoVec.clear();
-				mInitialized = false;
 				// Try to open info file:
 				std::ifstream tInfoFile(mTrack->getInfoPath().string());
 				// Handle info file:
@@ -297,18 +248,6 @@ namespace itp { namespace multitrack {
 				if (!mPlayerCb || !mInitialized) return;
 				mPlayerCb(read_from_file<T>(mTrack->getDirectory() / mInfoIterator->second));
 			}
-
-			/** @brief start method */
-			void start()
-			{
-				/* no-op */
-			}
-
-			/** @brief stop method */
-			void stop()
-			{ 
-				/* no-op */
-			}
 		};
 
 		/** @brief track recorder mediator */
@@ -328,41 +267,52 @@ namespace itp { namespace multitrack {
 			bool					mActive;		//!< flags whether recorder is active
 			std::ofstream			mInfoFile;		//!< info-file output stream
 
-			Recorder(typename TrackT::Ref iTrack, RecorderCallback iRecorderCallback, PlayerCallback iPlayerCallback) :
-				mTrack(iTrack),
-				mRecorderCb(iRecorderCallback),
-				mPlayerCb(iPlayerCallback),
-				mActive(false)
+			Recorder(typename TrackT::Ref track, RecorderCallback recorderCb, PlayerCallback playerCb, bool active) :
+				mTrack(track),
+				mRecorderCb(recorderCb),
+				mPlayerCb(playerCb),
+				mActive(active)
 			{ 
-				/* no-op */
+				// Start active recorder, if applicable:
+				if (mActive) {
+					// Check if directory already exists:
+					if (ci::fs::exists(mTrack->getDirectory())) {
+						// If path exists but is not a directory, throw:
+						if (!fs::is_directory(mTrack->getDirectory())) {
+							throw std::runtime_error("Could not open \'" + mTrack->getDirectory().string() + "\' as a directory");
+						}
+					}
+					// Create directory:
+					else if (!boost::filesystem::create_directory(mTrack->getDirectory())) {
+						throw std::runtime_error("Could not create \'" + mTrack->getDirectory().string() + "\' as a directory");
+					}
+					// Try to open info file:
+					mInfoFile.open(mTrack->getInfoPath().string());
+					// Handle info file not found error:
+					if (!mInfoFile.is_open()) {
+						throw std::runtime_error("Recorder could not open file: \'" + mTrack->getInfoPath().string() + "\'");
+					}
+					// Reset track's framecount:
+					mTrack->mFrameCount = 0;
+				}
 			}
 
 		public:
 			
 			~Recorder()
 			{
-				stop_info_file();
+				// Stop active recorder, if applicable:
+				if (mActive) {
+					if (mInfoFile.is_open()) {
+						mInfoFile.close();
+					}
+				}
 			}
 
 			/** @brief static creational method */
 			template <typename ... Args> static typename Recorder::Ref create(Args&& ... args)
 			{
 				return Recorder::Ref(new Recorder(std::forward<Args>(args)...));
-			}
-
-			RecorderCallback getRecorderCallbackFn() const
-			{
-				return mRecorderCb;
-			}
-
-			PlayerCallback getPlayerCallbackFn() const
-			{
-				return mPlayerCb;
-			}
-
-			const bool& isActive() const
-			{
-				return mActive;
 			}
 
 			/** @brief update method */
@@ -394,50 +344,6 @@ namespace itp { namespace multitrack {
 			{
 				if( !mPlayerCb ) return;
 				mPlayerCb( mBuffer );
-			}
-
-			/** @brief start method */
-			void start()
-			{
-				start_info_file();
-				mActive = true;
-				mTrack->mFrameCount = 0;
-			}
-
-			/** @brief stop method */
-			void stop()
-			{
-				stop_info_file();
-				mActive = false;
-			}
-			
-			void start_info_file()
-			{
-				// Stop previous, if applicable:
-				stop_info_file();
-				// Check if directory already exists:
-				if (ci::fs::exists(mTrack->getDirectory())) {
-					// If path exists but is not a directory, throw:
-					if (!fs::is_directory(mTrack->getDirectory())) {
-						throw std::runtime_error("Could not open \'" + mTrack->getDirectory().string() + "\' as a directory");
-					}
-				}
-				// Create directory:
-				else if (!boost::filesystem::create_directory(mTrack->getDirectory())) {
-					throw std::runtime_error("Could not create \'" + mTrack->getDirectory().string() + "\' as a directory");
-				}
-				// Try to open info file:
-				mInfoFile.open( mTrack->getInfoPath().string() );
-				// Handle info file not found error:
-				if( ! mInfoFile.is_open() )
-					throw std::runtime_error( "Recorder could not open file: \'" + mTrack->getInfoPath().string() + "\'" );
-			}
-			
-			void stop_info_file()
-			{
-				if( mInfoFile.is_open() ) {
-					mInfoFile.close();
-				}
 			}
 		};
 		
@@ -473,23 +379,21 @@ namespace itp { namespace multitrack {
 		
 		void update() { if( mMediator ) mMediator->update(); }
 		void draw() { if( mMediator ) mMediator->draw(); }
-		void start() { if (mMediator) mMediator->start(); }
-		void stop() { if( mMediator ) mMediator->stop(); }
 
 		void gotoPlayMode()
 		{
 			// Stop mediator:
-			if (mMediator) mMediator->stop();
+			if (mMediator) mMediator.reset();
 			// Create player mediator:
 			mMediator = Player::create(getRef<TrackT>(), mPlayerCb);
 		}
 
-		void gotoRecordMode()
+		void gotoRecordMode(bool active)
 		{
 			// Stop mediator:
-			if( mMediator ) mMediator->stop();
+			if (mMediator) mMediator.reset();
 			// Create recorder mediator:
-			mMediator = Recorder::create(getRef<TrackT>(), mRecorderCb, mPlayerCb);
+			mMediator = Recorder::create(getRef<TrackT>(), mRecorderCb, mPlayerCb, active);
 		}
 
 		/** @brief returns the track's frame-count */

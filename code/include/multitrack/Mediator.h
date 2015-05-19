@@ -39,12 +39,6 @@ namespace itp { namespace multitrack {
 
 		/** @brief pure virtual draw method */
 		virtual void draw() = 0;
-
-		/** @brief pure virtual start method */
-		virtual void start() = 0;
-
-		/** @brief pure virtual stop method */
-		virtual void stop() = 0;
 	};
 
 } } // namespace itp::multitrack

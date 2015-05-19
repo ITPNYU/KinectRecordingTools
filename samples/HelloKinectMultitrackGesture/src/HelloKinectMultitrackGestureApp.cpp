@@ -429,22 +429,22 @@ namespace itp { namespace multitrack {
 			}
 		}
 
-		/** @brief start sequence method */
-		void startSequence()
+		/** @brief start timer method */
+		void startTimer()
 		{
 			mTimer->start();
-			for (auto& curr : mSequence) {
-				curr->start();
-			}
 		}
 
-		/** @brief stop sequence method */
-		void stopSequence()
+		/** @brief pause timer method */
+		void pauseTimer()
+		{
+			mTimer->pause();
+		}
+
+		/** @brief stop timer method */
+		void stopTimer()
 		{
 			mTimer->stop();
-			for (auto& curr : mSequence) {
-				curr->stop();
-			}
 		}
 
 		/** @brief loop callback method */
@@ -495,7 +495,7 @@ namespace itp { namespace multitrack {
 			// Initialize player:
 			tTrack->gotoPlayMode();
 			// Add track to group:
-			tGroup->pushTop(tTrack);
+			tGroup->push(tTrack);
 			// Return output:
 			return tGroup;
 		}
@@ -510,7 +510,7 @@ namespace itp { namespace multitrack {
 			}
 		}
 
-		Track::Group::Ref createTrackSilhouette(const std::string& name)
+		Track::Group::Ref createTrackSilhouette(const std::string& name, bool active)
 		{
 			// Create group:
 			Track::Group::Ref tGroup = Track::Group::create(name + "_group");
@@ -536,9 +536,9 @@ namespace itp { namespace multitrack {
 				tImgRecorderCallbackFn,
 				tImgPlayerCallbackFn);
 			// Initialize recorder:
-			tTrack->gotoRecordMode();
+			tTrack->gotoRecordMode(active);
 			// Add track to group:
-			tGroup->pushTop(tTrack);
+			tGroup->push(tTrack);
 			// Return output:
 			return tGroup;
 
@@ -775,9 +775,8 @@ namespace itp { namespace multitrack {
 			Mode(controller, ci::Font("Helvetica", 60), "What's next?"),
 			mName(name),
 			mStart(ci::app::getElapsedSeconds()),
-			mPreview(mController->createTrackSilhouette("Preview"))
-		{ /* no-op */
-		}
+			mPreview(mController->createTrackSilhouette("Preview",false))
+		{ /* no-op */ }
 
 	public:
 
@@ -797,7 +796,6 @@ namespace itp { namespace multitrack {
 				if (mController->addGestureTemplate(mName)) {
 					mController->setPoseArchetype(mName, ci::gl::Texture::create(fbo->readPixels8u(fbo->getBounds())));
 				}
-				mPreview->stop();
 				mController->setMode("HomeMode");
 			}
 			else if (mController->getActiveBodyCount() != 1) {
@@ -857,9 +855,9 @@ namespace itp { namespace multitrack {
 
 		HomeMode(const Controller::Ref& controller) :
 			Mode(controller, ci::Font("Helvetica", 40), ""),
-			mPreview(mController->createTrackSilhouette("Preview"))
+			mPreview(mController->createTrackSilhouette("Preview",false))
 		{ 
-			mController->startSequence();
+			mController->startTimer();
 		}
 
 	public:
@@ -904,7 +902,6 @@ namespace itp { namespace multitrack {
 				if (mController->analyzeGesture(&recognizedGesture)) {
 					// Check for control gesture:
 					if (recognizedGesture == "CONTROL") {
-						mPreview->stop();
 						mController->startNewMovie();
 						mController->setMode(TransitionCardMode::create(
 							mController,
@@ -914,7 +911,6 @@ namespace itp { namespace multitrack {
 					}
 					// Check for actor gesture:
 					else if (recognizedGesture == "ACTOR") {
-						mPreview->stop();
 						mController->setMode(TransitionCardMode::create(
 							mController,
 							kStateTransitionLong,
@@ -923,7 +919,6 @@ namespace itp { namespace multitrack {
 					}
 					// Check for actor gesture:
 					else if (recognizedGesture == "CINEMATOGRAPHER") {
-						mPreview->stop();
 						mController->setMode(TransitionCardMode::create(
 							mController,
 							kStateTransitionLong,
@@ -950,10 +945,9 @@ namespace itp { namespace multitrack {
 
 		PerformActorMode(const Controller::Ref& controller) :
 			Mode(controller, ci::Font("Helvetica", 40), ""),
-			mRecorder(mController->createTrackSilhouette("track_" + std::to_string(mController->getNextUid())))
+			mRecorder(mController->createTrackSilhouette("track_" + std::to_string(mController->getNextUid()),true))
 		{ 
-			mController->startSequence();
-			mRecorder->start();
+			mController->startTimer();
 		}
 
 	public:
@@ -996,7 +990,6 @@ namespace itp { namespace multitrack {
 
 		void complete()
 		{
-			mRecorder->stop();
 			mController->addTrackGroup(mRecorder, true);
 			mController->setMode(TransitionCardMode::create(
 				mController,
@@ -1155,7 +1148,7 @@ namespace itp { namespace multitrack {
 
 		PerformCinematographerMode(const Controller::Ref& controller) :
 			Mode(controller, ci::Font("Helvetica", 40), ""),
-			mPreview(mController->createTrackSilhouette("PREVIEW")),
+			mPreview(mController->createTrackSilhouette("PREVIEW",false)),
 			mSubmode(Submode::CHOOSE_IMAGE),
 			mPlayheadCurr(0.0),
 			mSelectionCurr(SIZE_MAX)
@@ -1171,7 +1164,7 @@ namespace itp { namespace multitrack {
 			// Remove previous cinematographer:
 			mController->removeTrackCinematographer();
 			// Start sequence:
-			mController->startSequence();
+			mController->startTimer();
 		}
 
 	public:
@@ -1187,7 +1180,6 @@ namespace itp { namespace multitrack {
 			mController->updateSequence();
 			mPreview->update();
 			if (mController->getActiveBodyCount() != 1) {
-				mPreview->stop();
 				mController->setMode("WaitForUserMode");
 			}
 			else {
@@ -1201,7 +1193,7 @@ namespace itp { namespace multitrack {
 							if ("CONTROL" == bestResult.mName) {
 								mPlayheadCurr = mController->getTimer()->getPlayhead();
 								mSelectionFrames = 0;
-								mController->stopSequence();
+								mController->pauseTimer(); // TODO... correct? pause vs stop!
 								mSubmode = Submode::CHOOSE_IMAGE;
 							}
 						}
@@ -1223,7 +1215,7 @@ namespace itp { namespace multitrack {
 											// Restart sequence and process:
 											mSelectionFrames = 0;
 											mSelectionCurr = SIZE_MAX;
-											mController->startSequence();
+											mController->startTimer();
 											mSubmode = Submode::WAIT_FOR_NEW_MARKER;
 										}
 										else {
@@ -1293,7 +1285,6 @@ namespace itp { namespace multitrack {
 
 		void complete()
 		{
-			mPreview->stop();
 			// Save track:
 			mInfoManager.save("track_bg", mController->getBackgroundImagePaths());
 			// Add group to sequence:
