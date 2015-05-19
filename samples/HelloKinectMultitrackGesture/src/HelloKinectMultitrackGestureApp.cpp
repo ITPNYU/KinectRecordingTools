@@ -32,57 +32,13 @@ static const size_t kRecognitionSamplesMin = 25;
 
 static const size_t kSelectItemFramesMin = 100;
 
-static const double kSceneDurationSec = 20.0;
+static const double kSceneDurationSec = 60.0;
 static const double kShotDurationMin  = 3.0;
 static const double kShotDurationMax  = 8.0;
 
 static const double kStateTransitionShort = 2.0f;
 static const double kStateTransitionMedium = 4.0f;
 static const double kStateTransitionLong = 6.0f;
-
-enum AppState
-{
-	NONE,
-	HOME,
-	CHOOSE_ACTIVITY,
-	WAIT_FOR_SINGLE_USER,
-	ESTABLISH_IDLE_POSE,
-	ESTABLISH_CONTROL_POSE,
-	ESTABLISH_ACTOR_POSE,
-	BEGIN_ACTOR,
-	RECORD_ACTOR
-};
-
-struct CaptionImage
-{
-	typedef std::deque<CaptionImage> Deque;
-
-	ci::gl::TextureRef	mTex;
-	std::string			mMsg;
-};
-
-static inline void drawCaption(const CaptionImage& caption, const ci::vec2& dimension, const ci::Font& font)
-{
-	Rectf rect = Rectf(vec2(0.0, 0.0), dimension);
-	gl::color(1, 1, 1);
-	gl::drawSolidRect(rect);
-	gl::draw(caption.mTex, rect);
-	gl::drawString(caption.mMsg, vec2(dimension.x + 20.0, dimension.y * 0.5), Color(1, 1, 1), font);
-}
-
-static inline void drawCaptions(const CaptionImage::Deque& captions, const ci::vec2& dimension, const ci::Font& font)
-{
-	float padding = 5.0;
-	vec2 offset(0.0, 0.0);
-	for (const auto& caption : captions) {
-		gl::pushMatrices();
-		gl::translate(offset);
-		drawCaption(caption,dimension,font);
-		gl::popMatrices();
-		offset.y += dimension.y + padding;
-	}
-}
-
 
 namespace itp { namespace multitrack {
 
@@ -93,6 +49,14 @@ namespace itp { namespace multitrack {
 		if (pos == std::string::npos) return s;
 		return s.replace(pos, toRemove.length(), toInsert);
 	}
+
+	struct CaptionImage
+	{
+		typedef std::deque<CaptionImage> Deque;
+
+		ci::gl::TextureRef	mTex;
+		std::string			mMsg;
+	};
 
 	/** @brief abstract base class for mode types */
 	class Mode : public std::enable_shared_from_this<Mode> {
@@ -267,7 +231,7 @@ namespace itp { namespace multitrack {
 			if (fs::is_directory(audioAssetDir)) {
 				fs::directory_iterator dirEnd;
 				for (fs::directory_iterator it(audioAssetDir); it != dirEnd; it++) {
-					if ((*it).path().extension() == ".ogg") {
+					if ((*it).path().extension() == ".mp3") {
 						mSoundtrackPaths.push_back(*it);
 					}
 				}
@@ -918,6 +882,39 @@ namespace itp { namespace multitrack {
 			mController->startTimer(false);
 		}
 
+		void drawCaptions()
+		{
+			if (mCaptions.empty()) return;
+			// Set padding (TODO externalize?):
+			float padding = 25.0;
+			// Get caption count:
+			size_t captionCount = mCaptions.size();
+			// Compute item dimensions:
+			ci::vec2 dim;
+			dim.y = (getWindowHeight() - (padding * (captionCount + 1.0f))) / static_cast<float>(captionCount);
+			dim.x = dim.y * (static_cast<float>(kRawFrameWidth) / static_cast<float>(kRawFrameHeight));
+
+			vec2 offset(0.0, padding);
+			for (const auto& caption : mCaptions) {
+				gl::pushMatrices();
+				gl::translate(offset);
+
+				Rectf rect = Rectf(vec2(0.0, 0.0), dim);
+				gl::color(0.0, 0.0, 0.0, 0.75);
+				gl::drawSolidRect(rect);
+				gl::color(1.0, 1.0, 1.0, 1.0);
+				gl::draw(caption.mTex, rect);
+				gl::drawStrokedRect(rect);
+
+				gl::drawStringCentered(caption.mMsg, vec2((rect.x1 + rect.x2) * 0.5, rect.y2 - 50.0), Color(1, 1, 1), mFont);
+
+				//gl::drawString(caption.mMsg, vec2(dim.x + 20.0, dim.y * 0.5), Color(1, 1, 1), mFont);
+
+				gl::popMatrices();
+				offset.y += dim.y + padding;
+			}
+		}
+
 	public:
 
 		static Mode::Ref create(const Controller::Ref& controller)
@@ -930,10 +927,7 @@ namespace itp { namespace multitrack {
 			mController->updateSequence();
 			mPreview->update();
 			
-			if (mController->getActiveBodyCount() != 1) {
-				mController->setMode("WaitForUserMode");
-			}
-			else if (!mController->hasPoseArchetype("IDLE")) {
+			if (!mController->hasPoseArchetype("IDLE")) {
 				mController->setMode("EstablishIdlePoseMode");
 			}
 			else if (!mController->hasPoseArchetype("CONTROL")) {
@@ -948,45 +942,53 @@ namespace itp { namespace multitrack {
 			else {
 				// Initialize, if necessary:
 				if (mCaptions.empty()) {
-					// Set label:
-					mLabel = "What's next?";
 					// Set captions:
 					mCaptions = {
-						{ mController->getPoseArchetype("CONTROL"), "Start a new movie" },
-						{ mController->getPoseArchetype("ACTOR"), "Add an actor" },
-						{ mController->getPoseArchetype("CINEMATOGRAPHER"), "Perform cinematography" },
+						{ mController->getPoseArchetype("CONTROL"), "NEW MOVIE" },
+						{ mController->getPoseArchetype("ACTOR"), "ACTOR" },
+						{ mController->getPoseArchetype("CINEMATOGRAPHER"), "CINEMATOGRAPHER" },
 					};
 					// Start soundtrack:
 					mController->startSoundtrack();
 				}
-				// Analyze gesture:
-				std::string recognizedGesture;
-				if (mController->analyzeGesture(&recognizedGesture)) {
-					// Check for control gesture:
-					if (recognizedGesture == "CONTROL") {
-						mController->startNewMovie();
-						mController->setMode(TransitionCardMode::create(
-							mController,
-							kStateTransitionLong,
-							"Starting a new movie in $",
-							"HomeMode"));
+				// Handle single user:
+				if (mController->getActiveBodyCount() == 1) {
+					// Set label:
+					mLabel = "";
+					// Analyze gesture:
+					std::string recognizedGesture;
+					if (mController->analyzeGesture(&recognizedGesture)) {
+						// Check for control gesture:
+						if (recognizedGesture == "CONTROL") {
+							mController->startNewMovie();
+							mController->setMode(TransitionCardMode::create(
+								mController,
+								kStateTransitionLong,
+								"Starting a new movie in $",
+								"HomeMode"));
+						}
+						// Check for actor gesture:
+						else if (recognizedGesture == "ACTOR") {
+							mController->setMode(TransitionCardMode::create(
+								mController,
+								kStateTransitionLong,
+								"You're on in $",
+								"PerformActorMode"));
+						}
+						// Check for actor gesture:
+						else if (recognizedGesture == "CINEMATOGRAPHER") {
+							mController->setMode(TransitionCardMode::create(
+								mController,
+								kStateTransitionLong,
+								"Shooting in $",
+								"PerformCinematographerMode"));
+						}
 					}
-					// Check for actor gesture:
-					else if (recognizedGesture == "ACTOR") {
-						mController->setMode(TransitionCardMode::create(
-							mController,
-							kStateTransitionLong,
-							"You're on in $",
-							"PerformActorMode"));
-					}
-					// Check for actor gesture:
-					else if (recognizedGesture == "CINEMATOGRAPHER") {
-						mController->setMode(TransitionCardMode::create(
-							mController,
-							kStateTransitionLong,
-							"Shooting in $",
-							"PerformCinematographerMode"));
-					}
+				}
+				// Handle default:
+				else {
+					// Set label:
+					mLabel = "Ready when you are.";
 				}
 			}
 		}
@@ -996,7 +998,7 @@ namespace itp { namespace multitrack {
 			mController->drawSequence();
 			mPreview->draw();
 			ci::gl::drawStringCentered(mLabel, vec2(getWindowWidth() * 0.5f, getWindowHeight() - 100.0f), Color(1, 1, 1), mFont);
-			if (!mCaptions.empty()) drawCaptions(mCaptions, vec2(240, 135), mFont);
+			if (!mCaptions.empty() && mController->getActiveBodyCount() == 1) drawCaptions();
 		}
 
 		void onEvent(const std::string& str)
@@ -1250,12 +1252,21 @@ namespace itp { namespace multitrack {
 			else {
 				switch (mSubmode) {
 					case Submode::WAIT_FOR_NEW_MARKER: {
-						mLabel = "Perform CONTROL pose to add shot at " + std::to_string(mController->getTimer()->getPlayhead());
+						mLabel = "Perform CINEMATOGRAPHER pose to add shot at " + std::to_string(mController->getTimer()->getPlayhead());
+						// Analyze gesture:
+						std::string recognizedGesture;
+						if (mController->analyzeGesture(&recognizedGesture)) {
+							// Check for control gesture:
+							if (recognizedGesture == "CONTROL") {
+								complete();
+								return;
+							}
+						}
 						// Guess gesture:
 						foil::gesture::Result bestResult = mController->guessGesture();
 						// Check threshold:
 						if (bestResult.mScore >= kRecognitionThreshold) {
-							if ("CONTROL" == bestResult.mName) {
+							if ("CINEMATOGRAPHER" == bestResult.mName) {
 								// Prepare new marker:
 								prepareMarker();
 							}
@@ -1263,6 +1274,10 @@ namespace itp { namespace multitrack {
 						break;
 					}
 					case Submode::CHOOSE_IMAGE: {
+						// Set range map (TODO if mapping seems wrong on location, change these):
+						float rangeMapMin =  300.0;
+						float rangeMapMax = 1700.0;
+						// 
 						std::vector<Kinect2::Body> bodies = mController->getBodyFrame().getBodies();
 						if (!bodies.empty()) {
 							for (const Kinect2::Body& body : bodies) {
@@ -1270,7 +1285,7 @@ namespace itp { namespace multitrack {
 									ci::vec3 posRaw = body.getJointMap().at(JointType_HandRight).getPosition();
 									ci::ivec2 pos = mController->getKinect()->mapCameraToColor(posRaw);
 									ci::Rectf rect = mController->getFboRect();
-									size_t selectionCurr = static_cast<size_t>(ci::lmap<float>(static_cast<float>(pos.x), rect.x1, rect.x2, 0.0f, static_cast<float>(mBackgroundImages.size())));
+									size_t selectionCurr = static_cast<size_t>(ci::lmap<float>((float)pos.x, rangeMapMin, rangeMapMax, 0.0f, (float)mBackgroundImages.size()));
 									if (mSelectionCurr == selectionCurr) {
 										if (mDecisionFramecount == kSelectItemFramesMin) {
 											// Update info deque:
@@ -1293,10 +1308,7 @@ namespace itp { namespace multitrack {
 								}
 							}
 						}
-						//mLabel = "Please hold your RIGHT HAND over a shot location";
-						//TODO temp
-						mLabel = "TODO TEST playhead: " + std::to_string(mController->getTimer()->getPlayhead());
-
+						mLabel = "Please hold your RIGHT HAND over a shot location";
 						break;
 					}
 					default: {
@@ -1328,13 +1340,13 @@ namespace itp { namespace multitrack {
 							gl::color(1.0, 1.0, 1.0, 0.0);
 						}
 						if (i == mSelectionCurr) {
-							gl::color(1.0, 1.0, 1.0, 0.5 + completeRatio * 0.5);
+							gl::color(1.0, 1.0, 1.0, 0.75 + completeRatio * 0.75);
 							gl::draw(mBackgroundImages[i], rect);
 							gl::color(0.0, 1.0, 0.0, 1.0);
 							gl::drawStrokedRect(rect);
 						}
 						else  {
-							gl::color(1.0, 1.0, 1.0, 0.5 - completeRatio * 0.5);
+							gl::color(1.0, 1.0, 1.0, 0.75 - completeRatio * 0.75);
 							gl::draw(mBackgroundImages[i], rect);
 						}
 						// Advance:
@@ -1409,6 +1421,7 @@ public:
 	void update() override;
 	void draw() override;
 	void cleanup() override;
+	void keyDown(ci::app::KeyEvent event) override;
 
 	itp::multitrack::Controller::Ref mController;
 };
@@ -1422,6 +1435,9 @@ void HelloKinectMultitrackGestureApp::setup()
 		ci::app::console() << "Could not initialize multitrack controller" << std::endl;
 		quit();
 	}
+
+	setFullScreen(true);
+	::ShowCursor(false);
 }
 
 void HelloKinectMultitrackGestureApp::update()
@@ -1437,6 +1453,24 @@ void HelloKinectMultitrackGestureApp::draw()
 void HelloKinectMultitrackGestureApp::cleanup()
 {
 	mController.reset();
+	::ShowCursor(true);
+}
+
+void HelloKinectMultitrackGestureApp::keyDown(KeyEvent event)
+{
+	if (event.getChar() == 'f') {
+		if (isFullScreen()) {
+			setFullScreen(false);
+			::ShowCursor(true);
+		}
+		else {
+			setFullScreen(true);
+			::ShowCursor(false);
+		}
+	}
+	else if (event.getChar() == 'q') {
+		quit();
+	}
 }
 
 CINDER_APP(HelloKinectMultitrackGestureApp, RendererGl, [](App::Settings* settings)
