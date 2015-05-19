@@ -1127,9 +1127,7 @@ namespace itp { namespace multitrack {
 		Submode								mSubmode;
 		std::vector<ci::gl::TextureRef>		mBackgroundImages;
 
-		double								mPlayheadCurr;
 		size_t								mSelectionCurr;
-
 		size_t								mDecisionFramecount;
 
 		InfoManager							mInfoManager;
@@ -1137,7 +1135,6 @@ namespace itp { namespace multitrack {
 		PerformCinematographerMode(const Controller::Ref& controller) :
 			Mode(controller, ci::Font("Helvetica", 40), ""),
 			mPreview(mController->createTrackSilhouette("PREVIEW",false)),
-			mPlayheadCurr(0.0),
 			mSelectionCurr(SIZE_MAX)
 		{
 			// Load background images:
@@ -1191,8 +1188,6 @@ namespace itp { namespace multitrack {
 						// Check threshold:
 						if (bestResult.mScore >= kRecognitionThreshold) {
 							if ("CONTROL" == bestResult.mName) {
-								// Take note of playhead at time of gesture: // TODO not necessary with pausing!?!?!?
-								mPlayheadCurr = mController->getTimer()->getPlayhead();
 								// Prepare new marker:
 								prepareMarker();
 							}
@@ -1211,7 +1206,7 @@ namespace itp { namespace multitrack {
 									if (mSelectionCurr == selectionCurr) {
 										if (mDecisionFramecount == kSelectItemFramesMin) {
 											// Update info deque:
-											mInfoManager.addItem(ItemInfo(mPlayheadCurr, mSelectionCurr, mBackgroundImages[mSelectionCurr]));
+											mInfoManager.addItem(ItemInfo(mController->getTimer()->getPlayhead(), mSelectionCurr, mBackgroundImages[mSelectionCurr]));
 											// Restart sequence and process:
 											mDecisionFramecount = 0;
 											mSelectionCurr = SIZE_MAX;
@@ -1259,16 +1254,22 @@ namespace itp { namespace multitrack {
 					for (size_t i = 0; i < imgCount; i++) {
 						float itemHeight = itemWidth / mBackgroundImages[i]->getAspectRatio();
 						float itemY = (getWindowHeight() - itemHeight) * 0.5f;
+						ci::Rectf rect = ci::Rectf(itemX, itemY, itemX + itemWidth, itemY + itemHeight);
+						// Draw image:
 						if (mSelectionCurr != SIZE_MAX) {
 							gl::color(1.0, 1.0, 1.0, 0.0);
 						}
 						if (i == mSelectionCurr) {
 							gl::color(1.0, 1.0, 1.0, 0.5 + completeRatio * 0.5);
+							gl::draw(mBackgroundImages[i], rect);
+							gl::color(0.0, 1.0, 0.0, 1.0);
+							gl::drawStrokedRect(rect);
 						}
 						else  {
 							gl::color(1.0, 1.0, 1.0, 0.5 - completeRatio * 0.5);
+							gl::draw(mBackgroundImages[i], rect);
 						}
-						gl::draw(mBackgroundImages[i], ci::Rectf(itemX, itemY, itemX + itemWidth, itemY + itemHeight));
+						// Advance:
 						itemX += itemWidth;
 					}
 					break;
