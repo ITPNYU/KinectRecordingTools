@@ -1,5 +1,7 @@
 #include "cinder/app/App.h"
 #include "cinder/app/RendererGl.h"
+#include "cinder/audio/Voice.h"
+#include "cinder/audio/Source.h"
 #include "cinder/gl/gl.h"
 #include "cinder/gl/Fbo.h"
 #include "cinder/ImageIo.h"
@@ -192,7 +194,8 @@ namespace itp { namespace multitrack {
 		foil::gesture::Recognizer					mRecognizer;
 		foil::gesture::Result::Deque				mRecognizerBuffer;
 
-		std::vector<ci::fs::path>					mBackgroundImgPaths;
+		std::vector<ci::fs::path>					mBackgroundPaths;
+		std::vector<ci::fs::path>					mSoundtrackPaths;
 
 		Timer::Ref									mTimer;
 		ci::fs::path								mDirectory;
@@ -201,6 +204,8 @@ namespace itp { namespace multitrack {
 
 		Mode::Ref									mModeCurr;
 		Mode::Ref									mModeNext;
+
+		ci::audio::VoiceRef							mSoundtrack;
 
 		/** @brief default constructor */
 		Controller() { /* no-op */ }
@@ -245,15 +250,25 @@ namespace itp { namespace multitrack {
 			// Setup FBO:
 			ci::gl::Fbo::Format tSilhouetteFboFormat;
 			mSilhouetteFbo = ci::gl::Fbo::create(kRawFrameWidth, kRawFrameHeight, tSilhouetteFboFormat.colorTexture());
-			// Get background image directory:
-			ci::fs::path assetDir = getAssetDirectories().front() / "background";
+			// Get background asset directory:
+			ci::fs::path bgAssetDir = getAssetDirectories().front() / "background";
 			// Iterate over directory:
-			if (fs::is_directory(assetDir)) {
-				// Iterate over directory:
+			if (fs::is_directory(bgAssetDir)) {
 				fs::directory_iterator dirEnd;
-				for (fs::directory_iterator it(assetDir); it != dirEnd; it++) {
+				for (fs::directory_iterator it(bgAssetDir); it != dirEnd; it++) {
 					if ((*it).path().extension() == ".png") {
-						mBackgroundImgPaths.push_back(*it);
+						mBackgroundPaths.push_back(*it);
+					}
+				}
+			}
+			// Get audio asset directory:
+			ci::fs::path audioAssetDir = getAssetDirectories().front() / "audio";
+			// Iterate over directory:
+			if (fs::is_directory(audioAssetDir)) {
+				fs::directory_iterator dirEnd;
+				for (fs::directory_iterator it(audioAssetDir); it != dirEnd; it++) {
+					if ((*it).path().extension() == ".ogg") {
+						mSoundtrackPaths.push_back(*it);
 					}
 				}
 			}
@@ -304,9 +319,9 @@ namespace itp { namespace multitrack {
 			return mDirectory;
 		}
 
-		const std::vector<ci::fs::path>& getBackgroundImagePaths() const
+		const std::vector<ci::fs::path>& getBackgroundPaths() const
 		{
-			return mBackgroundImgPaths;
+			return mBackgroundPaths;
 		}
 
 		const size_t& getActiveBodyCount() const
@@ -429,21 +444,49 @@ namespace itp { namespace multitrack {
 			}
 		}
 
-		/** @brief start timer method */
-		void startTimer()
+		/** @brief start soundtrack method */
+		void startSoundtrack()
 		{
+			if (mSoundtrack) {
+				mSoundtrack->stop();
+				mSoundtrack->start();
+			}
+		}
+
+		/** @brief pause soundtrack method */
+		void pauseSoundtrack()
+		{
+			if (mSoundtrack) {
+				mSoundtrack->pause();
+			}
+		}
+
+		/** @brief stop soundtrack method */
+		void stopSoundtrack()
+		{
+			if (mSoundtrack) {
+				mSoundtrack->stop();
+			}
+		}
+
+		/** @brief start timer method */
+		void startTimer(bool handleSoundtrack)
+		{
+			if (handleSoundtrack) startSoundtrack();
 			mTimer->start();
 		}
 
 		/** @brief pause timer method */
 		void pauseTimer()
 		{
+			pauseSoundtrack();
 			mTimer->pause();
 		}
 
 		/** @brief stop timer method */
 		void stopTimer()
 		{
+			stopSoundtrack();
 			mTimer->stop();
 		}
 
@@ -460,11 +503,19 @@ namespace itp { namespace multitrack {
 		void startNewMovie()
 		{
 			// Stop timer:
-			mTimer->stop();
+			stopTimer();
 			// Clear current sequence:
 			mSequence.clear();
 			// Reset id counter:
 			mUidCounter = 0;
+			// Pick new soundtrack randomly:
+			if (!mSoundtrackPaths.empty()) {
+				ci::fs::path currPath = mSoundtrackPaths[ci::randInt(0, mSoundtrackPaths.size())];
+				mSoundtrack = audio::Voice::create(audio::load(ci::DataSourcePath::create(currPath)));
+				mSoundtrack->setVolume(1.0);
+				mSoundtrack->setPan(0.5);
+				stopSoundtrack();
+			}
 		}
 
 		Track::Group::Ref createTrackCinematographer(size_t frameCount)
@@ -578,7 +629,7 @@ namespace itp { namespace multitrack {
 					group->gotoPlayMode();
 				}
 				// Stop timer:
-				mTimer->stop();
+				stopTimer();
 			}
 		}
 
@@ -738,7 +789,9 @@ namespace itp { namespace multitrack {
 			mDuration(duration),
 			mMessage(msg),
 			mTargetMode(targetMode)
-		{ /* no-op */ }
+		{
+			mController->stopTimer();
+		}
 
 	public:
 
@@ -776,7 +829,9 @@ namespace itp { namespace multitrack {
 			mName(name),
 			mStart(ci::app::getElapsedSeconds()),
 			mPreview(mController->createTrackSilhouette("Preview",false))
-		{ /* no-op */ }
+		{
+			mController->stopTimer();
+		}
 
 	public:
 
@@ -818,7 +873,9 @@ namespace itp { namespace multitrack {
 
 		WaitForUserMode(const Controller::Ref& controller) :
 			Mode(controller, ci::Font("Helvetica", 80), "")
-		{ /* no-op */ }
+		{ 
+			mController->stopTimer();
+		}
 
 	public:
 
@@ -858,7 +915,7 @@ namespace itp { namespace multitrack {
 			Mode(controller, ci::Font("Helvetica", 40), ""),
 			mPreview(mController->createTrackSilhouette("Preview",false))
 		{ 
-			mController->startTimer();
+			mController->startTimer(false);
 		}
 
 	public:
@@ -889,14 +946,18 @@ namespace itp { namespace multitrack {
 				mController->setMode("EstablishCinematographerPoseMode");
 			}
 			else {
-				// Load captions if necessary:
+				// Initialize, if necessary:
 				if (mCaptions.empty()) {
+					// Set label:
 					mLabel = "What's next?";
+					// Set captions:
 					mCaptions = {
 						{ mController->getPoseArchetype("CONTROL"), "Start a new movie" },
 						{ mController->getPoseArchetype("ACTOR"), "Add an actor" },
 						{ mController->getPoseArchetype("CINEMATOGRAPHER"), "Perform cinematography" },
 					};
+					// Start soundtrack:
+					mController->startSoundtrack();
 				}
 				// Analyze gesture:
 				std::string recognizedGesture;
@@ -937,6 +998,13 @@ namespace itp { namespace multitrack {
 			ci::gl::drawStringCentered(mLabel, vec2(getWindowWidth() * 0.5f, getWindowHeight() - 100.0f), Color(1, 1, 1), mFont);
 			if (!mCaptions.empty()) drawCaptions(mCaptions, vec2(240, 135), mFont);
 		}
+
+		void onEvent(const std::string& str)
+		{
+			if ("LOOP" == str) {
+				mController->startSoundtrack();
+			}
+		}
 	};
 
 	class PerformActorMode : public Mode {
@@ -948,7 +1016,7 @@ namespace itp { namespace multitrack {
 			Mode(controller, ci::Font("Helvetica", 40), ""),
 			mRecorder(mController->createTrackSilhouette("track_" + std::to_string(mController->getNextUid()),true))
 		{ 
-			mController->startTimer();
+			mController->startTimer(true);
 		}
 
 	public:
@@ -1138,7 +1206,7 @@ namespace itp { namespace multitrack {
 			mSelectionCurr(SIZE_MAX)
 		{
 			// Load background images:
-			const std::vector<ci::fs::path>& imagePaths = mController->getBackgroundImagePaths();
+			const std::vector<ci::fs::path>& imagePaths = mController->getBackgroundPaths();
 			for (const auto& imagePath : imagePaths) {
 				mBackgroundImages.push_back(ci::gl::Texture::create(ci::Surface(loadImage(imagePath))));
 			}
@@ -1149,7 +1217,7 @@ namespace itp { namespace multitrack {
 			// Remove previous cinematographer:
 			mController->removeTrackCinematographer();
 			// Goto start of sequence:
-			mController->startTimer();
+			mController->startTimer(true);
 			// Prepare initial marker:
 			prepareMarker();
 		}
@@ -1210,7 +1278,7 @@ namespace itp { namespace multitrack {
 											// Restart sequence and process:
 											mDecisionFramecount = 0;
 											mSelectionCurr = SIZE_MAX;
-											mController->startTimer();
+											mController->startTimer(true);
 											mSubmode = Submode::WAIT_FOR_NEW_MARKER;
 										}
 										else {
@@ -1290,7 +1358,7 @@ namespace itp { namespace multitrack {
 		void complete()
 		{
 			// Save track:
-			mInfoManager.save("track_bg", mController->getBackgroundImagePaths());
+			mInfoManager.save("track_bg", mController->getBackgroundPaths());
 			// Add group to sequence:
 			mController->addTrackGroup(mController->createTrackCinematographer(mInfoManager.getFrameCount()), false);
 			// Return home:
