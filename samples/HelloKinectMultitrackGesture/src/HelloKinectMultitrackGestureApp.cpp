@@ -990,6 +990,7 @@ namespace itp { namespace multitrack {
 
 		void complete()
 		{
+			mRecorder->gotoPlayMode();
 			mController->addTrackGroup(mRecorder, true);
 			mController->setMode(TransitionCardMode::create(
 				mController,
