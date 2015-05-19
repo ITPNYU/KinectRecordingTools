@@ -802,7 +802,7 @@ namespace itp { namespace multitrack {
 				mController->setMode("WaitForUserMode");
 			}
 			else {
-				mLabel = "Establishing " + mName + " pose in " + std::to_string(static_cast<int>(duration - timeElap)) + " seconds.";
+				mLabel = "Establishing " + mName + " pose in " + std::to_string(static_cast<int>(duration - timeElap));
 			}
 		}
 
@@ -817,7 +817,7 @@ namespace itp { namespace multitrack {
 	private:
 
 		WaitForUserMode(const Controller::Ref& controller) :
-			Mode(controller, ci::Font("Helvetica", 40), "")
+			Mode(controller, ci::Font("Helvetica", 80), "")
 		{ /* no-op */ }
 
 	public:
@@ -830,7 +830,8 @@ namespace itp { namespace multitrack {
 		void update()
 		{ 
 			if (mController->getActiveBodyCount() != 1) {
-				mLabel = "I see " + std::to_string(mController->getActiveBodyCount()) + " users, but need one.";
+				if (mController->getActiveBodyCount() == 0) mLabel = "Is anyone there?";
+				else mLabel = "I see " + std::to_string(mController->getActiveBodyCount()) + " users, but need one.";
 			}
 			else {
 				mController->setMode(TransitionCardMode::create(
@@ -906,7 +907,7 @@ namespace itp { namespace multitrack {
 						mController->setMode(TransitionCardMode::create(
 							mController,
 							kStateTransitionLong,
-							"Starting a new movie in $ seconds.",
+							"Starting a new movie in $",
 							"HomeMode"));
 					}
 					// Check for actor gesture:
@@ -914,7 +915,7 @@ namespace itp { namespace multitrack {
 						mController->setMode(TransitionCardMode::create(
 							mController,
 							kStateTransitionLong,
-							"You're on in $ seconds.",
+							"You're on in $",
 							"PerformActorMode"));
 					}
 					// Check for actor gesture:
@@ -922,7 +923,7 @@ namespace itp { namespace multitrack {
 						mController->setMode(TransitionCardMode::create(
 							mController,
 							kStateTransitionLong,
-							"Shooting in $ seconds.",
+							"Shooting in $",
 							"PerformCinematographerMode"));
 					}
 				}
@@ -995,7 +996,7 @@ namespace itp { namespace multitrack {
 			mController->setMode(TransitionCardMode::create(
 				mController,
 				kStateTransitionLong,
-				"Cut! We'll be back in $ seconds.",
+				"Cut! We'll be back in $",
 				"HomeMode"));
 		}
 	};
@@ -1014,8 +1015,8 @@ namespace itp { namespace multitrack {
 			typedef std::deque<ItemInfo> Deque;
 
 			double						mTime;
+			size_t						mIdx;
 			ci::gl::TextureRef			mTex;
-			size_t						mId;
 
 			struct sort_by_time_a { bool operator()(const ItemInfo& a, const ItemInfo& b) { return (a.mTime < b.mTime); } };
 			struct sort_by_time_d { bool operator()(const ItemInfo& a, const ItemInfo& b) { return (a.mTime > b.mTime); } };
@@ -1025,25 +1026,23 @@ namespace itp { namespace multitrack {
 				if (ascending) { std::sort(items.begin(), items.end(), sort_by_time_a()); }
 				else           { std::sort(items.begin(), items.end(), sort_by_time_d()); }
 			}
+
+			ItemInfo() { /* no-op */ }
+
+			ItemInfo(double itemTime, size_t itemIdx, const ci::gl::TextureRef& itemTex) :
+				mTime(itemTime),
+				mIdx(itemIdx),
+				mTex(itemTex)
+			{ /* no-op */ }
 		};
 
 		struct InfoManager
 		{
 			ItemInfo::Deque				mInfoDeque;
 			ItemInfo::Deque::iterator	mInfoIterator;
-			double						mKeyTimeCurr;
-			double						mKeyTimeNext;
 			bool						mInitialized;
 
-			InfoManager() { reset(); }
-
-			void reset()
-			{
-				mKeyTimeCurr = 0.0;
-				mKeyTimeNext = 0.0;
-				mInitialized = false;
-				mInfoDeque.clear();
-			}
+			InfoManager() : mInitialized(false) { /* no-op */ }
 
 			void sort()
 			{
@@ -1064,31 +1063,18 @@ namespace itp { namespace multitrack {
 
 			void update(double playhead)
 			{
-				// Handle empty track:
-				if (mInfoDeque.empty()) {
-					mInitialized = false;
-					return;
+				// Get iterator:
+				mInfoIterator = mInfoDeque.begin();
+				// Iterate over frames:
+				while (mInfoIterator != mInfoDeque.end()) {
+					ItemInfo::Deque::iterator iterNext = mInfoIterator + 1;
+					if (iterNext != mInfoDeque.end() && playhead < iterNext->mTime) {
+						break;
+					}
+					mInfoIterator = iterNext;
 				}
-				// Get track endpoints:
-				double tBegin = mInfoDeque.front().mTime;
-				double tEnd = mInfoDeque.back().mTime;
-				// Handle playhead out-of-range:
-				if (playhead < tBegin || playhead > tEnd) {
-					mInitialized = false;
-					return;
-				}
-				// Activate, if necessary:
-				if (!mInitialized) {
-					mInitialized = true;
-					mInfoIterator = mInfoDeque.begin();
-					mKeyTimeCurr = mInfoDeque.front().mTime;
-					mKeyTimeNext = ((mInfoDeque.size() > 1) ? (mInfoIterator + 1)->mTime : mKeyTimeCurr);
-				}
-				// Update iterator:
-				while (playhead >= mKeyTimeNext && mInfoIterator != mInfoDeque.end()) {
-					mKeyTimeCurr = mInfoIterator->mTime;
-					mKeyTimeNext = ((++mInfoIterator == mInfoDeque.end()) ? mKeyTimeCurr : mInfoIterator->mTime);
-				}
+				// Set initialization flag:
+				mInitialized = (mInfoIterator != mInfoDeque.end());
 			}
 
 			void draw(const ci::Rectf& rect)
@@ -1123,7 +1109,7 @@ namespace itp { namespace multitrack {
 					size_t itemCount = mInfoDeque.size();
 					for (size_t i = 0; i < itemCount; i++) {
 						// Write image:
-						ci::Surface surf = ci::Surface(loadImage(imagePaths[mInfoDeque[i].mId]));
+						ci::Surface surf = ci::Surface(loadImage(imagePaths[mInfoDeque[i].mIdx]));
 						ci::writeImage(currDir / ("frame_" + std::to_string(i) + ".png"), surf);
 						// Write frame to info file:
 						tInfoFile << std::to_string(mInfoDeque[i].mTime) + " frame_" + std::to_string(i) + ".png" << std::endl;
@@ -1143,14 +1129,14 @@ namespace itp { namespace multitrack {
 
 		double								mPlayheadCurr;
 		size_t								mSelectionCurr;
-		size_t								mSelectionFrames;
+
+		size_t								mDecisionFramecount;
 
 		InfoManager							mInfoManager;
 
 		PerformCinematographerMode(const Controller::Ref& controller) :
 			Mode(controller, ci::Font("Helvetica", 40), ""),
 			mPreview(mController->createTrackSilhouette("PREVIEW",false)),
-			mSubmode(Submode::CHOOSE_IMAGE),
 			mPlayheadCurr(0.0),
 			mSelectionCurr(SIZE_MAX)
 		{
@@ -1161,11 +1147,24 @@ namespace itp { namespace multitrack {
 			}
 			// Initialize info manager:
 			mInfoManager = InfoManager();
-			mInfoManager.addItem({ kSceneDurationSec, mBackgroundImages[0], 0 }); // TODO this fix is hackish
+			// Force throw-away final frame:
+			mInfoManager.addItem(ItemInfo(kSceneDurationSec, 0, mBackgroundImages[0]));
 			// Remove previous cinematographer:
 			mController->removeTrackCinematographer();
-			// Start sequence:
+			// Goto start of sequence:
 			mController->startTimer();
+			// Prepare initial marker:
+			prepareMarker();
+		}
+
+		void prepareMarker()
+		{
+			// Reset decision frame counter:
+			mDecisionFramecount = 0;
+			// Set submode:
+			mSubmode = Submode::CHOOSE_IMAGE;
+			// Pause timer:
+			mController->pauseTimer();
 		}
 
 	public:
@@ -1186,16 +1185,16 @@ namespace itp { namespace multitrack {
 			else {
 				switch (mSubmode) {
 					case Submode::WAIT_FOR_NEW_MARKER: {
-						mLabel = "Perform CONTROL pose to add shot at " + std::to_string(mController->getTimer()->getPlayhead()) + " seconds";
+						mLabel = "Perform CONTROL pose to add shot at " + std::to_string(mController->getTimer()->getPlayhead());
 						// Guess gesture:
 						foil::gesture::Result bestResult = mController->guessGesture();
 						// Check threshold:
 						if (bestResult.mScore >= kRecognitionThreshold) {
 							if ("CONTROL" == bestResult.mName) {
+								// Take note of playhead at time of gesture: // TODO not necessary with pausing!?!?!?
 								mPlayheadCurr = mController->getTimer()->getPlayhead();
-								mSelectionFrames = 0;
-								mController->pauseTimer(); // TODO... correct? pause vs stop!
-								mSubmode = Submode::CHOOSE_IMAGE;
+								// Prepare new marker:
+								prepareMarker();
 							}
 						}
 						break;
@@ -1210,28 +1209,31 @@ namespace itp { namespace multitrack {
 									ci::Rectf rect = mController->getFboRect();
 									size_t selectionCurr = static_cast<size_t>(ci::lmap<float>(static_cast<float>(pos.x), rect.x1, rect.x2, 0.0f, static_cast<float>(mBackgroundImages.size())));
 									if (mSelectionCurr == selectionCurr) {
-										if (mSelectionFrames == kSelectItemFramesMin) {
+										if (mDecisionFramecount == kSelectItemFramesMin) {
 											// Update info deque:
-											mInfoManager.addItem({ mPlayheadCurr, mBackgroundImages[mSelectionCurr], mSelectionCurr });
+											mInfoManager.addItem(ItemInfo(mPlayheadCurr, mSelectionCurr, mBackgroundImages[mSelectionCurr]));
 											// Restart sequence and process:
-											mSelectionFrames = 0;
+											mDecisionFramecount = 0;
 											mSelectionCurr = SIZE_MAX;
 											mController->startTimer();
 											mSubmode = Submode::WAIT_FOR_NEW_MARKER;
 										}
 										else {
-											mSelectionFrames++;
+											mDecisionFramecount++;
 										}
 									}
 									else {
-										mSelectionFrames = 0;
+										mDecisionFramecount = 0;
 										mSelectionCurr = selectionCurr;
 									}
 									break;
 								}
 							}
 						}
-						mLabel = "Please hold your RIGHT HAND over a shot location";
+						//mLabel = "Please hold your RIGHT HAND over a shot location";
+						//TODO temp
+						mLabel = "TODO TEST playhead: " + std::to_string(mController->getTimer()->getPlayhead());
+
 						break;
 					}
 					default: {
@@ -1253,7 +1255,7 @@ namespace itp { namespace multitrack {
 					float itemX = 0.0f;
 					size_t imgCount = mBackgroundImages.size();
 					float itemWidth = static_cast<float>(getWindowWidth()) / static_cast<float>(imgCount);
-					float completeRatio = static_cast<float>(mSelectionFrames) / static_cast<float>(kSelectItemFramesMin);
+					float completeRatio = static_cast<float>(mDecisionFramecount) / static_cast<float>(kSelectItemFramesMin);
 					for (size_t i = 0; i < imgCount; i++) {
 						float itemHeight = itemWidth / mBackgroundImages[i]->getAspectRatio();
 						float itemY = (getWindowHeight() - itemHeight) * 0.5f;
@@ -1294,7 +1296,7 @@ namespace itp { namespace multitrack {
 			mController->setMode(TransitionCardMode::create(
 				mController,
 				kStateTransitionLong,
-				"Cut! We'll be back in $ seconds.",
+				"Cut! We'll be back in $",
 				"HomeMode"));
 		}
 	};

@@ -161,18 +161,14 @@ namespace itp { namespace multitrack {
 			typename TrackT::Ref	mTrack;
 			FrameInfoVec			mInfoVec;
 			FrameInfoIter			mInfoIterator;
-			PlayerCallback			mPlayerCb;
-			double					mKeyTimeCurr;
-			double					mKeyTimeNext;
 			bool					mInitialized;
+			PlayerCallback			mPlayerCb;
 			
 			/** @brief basic constructor */
 			Player(typename TrackT::Ref track, PlayerCallback playerCb) :
 				mTrack(track),
 				mPlayerCb(playerCb),
 				mInfoVec( FrameInfoVec() ),
-				mKeyTimeCurr( 0.0 ),
-				mKeyTimeNext( 0.0 ),
 				mInitialized( false )
 			{
 				// Try to open info file:
@@ -213,33 +209,18 @@ namespace itp { namespace multitrack {
 			/** @brief update method */
 			void update()
 			{
-				// Handle empty track:
-				if (mInfoVec.empty()) {
-					mInitialized = false;
-					return;
+				// Get iterator:
+				mInfoIterator = mInfoVec.begin();
+				// Iterate over frames:
+				while (mInfoIterator != mInfoVec.end()) {
+					FrameInfoIter iterNext = mInfoIterator + 1;
+					if (iterNext != mInfoVec.end() && mTrack->mTimer->getPlayhead() < iterNext->first) {
+						break;
+					}
+					mInfoIterator = iterNext;
 				}
-				// Get track endpoints:
-				double tBegin    = mInfoVec.front().first;
-				double tEnd      = mInfoVec.back().first;
-				// Get playhead:
-				const double& tPlayhead = mTrack->mTimer->getPlayhead();
-				// Handle playhead out-of-range:
-				if (tPlayhead < tBegin || tPlayhead > tEnd) {
-					mInitialized = false;
-					return;
-				}
-				// Activate, if necessary:
-				if (!mInitialized) {
-					mInitialized = true;
-					mInfoIterator = mInfoVec.begin();
-					mKeyTimeCurr = mInfoVec.front().first;
-					mKeyTimeNext = ((mInfoVec.size() > 1) ? (mInfoIterator + 1)->first : mKeyTimeCurr);
-				}
-				// Update iterator:
-				while (tPlayhead >= mKeyTimeNext && mInfoIterator != mInfoVec.end()) {
-					mKeyTimeCurr = mInfoIterator->first;
-					mKeyTimeNext = ((++mInfoIterator == mInfoVec.end()) ? mKeyTimeCurr : mInfoIterator->first);
-				}
+				// Set initialization flag:
+				mInitialized = (mInfoIterator != mInfoVec.end());
 			}
 
 			/** @brief draw method */
