@@ -90,6 +90,13 @@ namespace itp { namespace multitrack {
 		return s.replace(pos, toRemove.length(), toInsert);
 	}
 
+	static inline std::string decimalToString(double number)
+	{
+		std::stringstream ss;
+		ss << std::fixed << std::setprecision(2) << std::setw(5) << number;
+		return ss.str();
+	}
+
 	/** @brief abstract base class for mode types */
 	class Mode : public std::enable_shared_from_this<Mode> {
 	public:
@@ -1181,14 +1188,13 @@ namespace itp { namespace multitrack {
 				} 
 				else {
 					mParent->mLabel =
-						"Preview track #"
+						"Preview SHOT #"
 						+ std::to_string(mIndex + 1)
-						+ " time: "
-						+ std::to_string(playhead)
-						+ " in: "
-						+ std::to_string(mRange.first)
-						+ " to "
-						+ std::to_string(mRange.second)
+						+ ": "
+						+ decimalToString(playhead - mRange.first)
+						+ " of "
+						+ decimalToString(mRange.second - mRange.first)
+						+ " seconds"
 						;
 				}
 			}
@@ -1239,14 +1245,13 @@ namespace itp { namespace multitrack {
 				}
 				else {
 					mParent->mLabel =
-						"Record track #"
+						"Record SHOT #"
 						+ std::to_string(mIndex + 1)
-						+ " time: "
-						+ std::to_string(playhead)
-						+ " in: "
-						+ std::to_string(mRange.first)
-						+ " to "
-						+ std::to_string(mRange.second)
+						+ ": "
+						+ decimalToString(playhead - mRange.first)
+						+ " of "
+						+ decimalToString(mRange.second - mRange.first)
+						+ " seconds"
 						;
 				}
 			}
@@ -1291,7 +1296,8 @@ namespace itp { namespace multitrack {
 		{
 			// Goto first preview intertitle:
 			mState = State::PREVIEW_INTER;
-			mSubmodeNext = TransitionSubmode::create(getRef<PerformActorMode>(), kStateTransitionLong, "Get ready to PREVIEW SHOT #" + std::to_string(mShotIndex + 1) + " in $");
+			std::string msg = "Get ready to preview SHOT #" + std::to_string(mShotIndex + 1) + "/" + std::to_string(mController->getEditDecisions().size()) + " in $ seconds";
+			mSubmodeNext = TransitionSubmode::create(getRef<PerformActorMode>(), kStateTransitionLong, msg);
 		}
 
 	public:
@@ -1318,7 +1324,8 @@ namespace itp { namespace multitrack {
 				}
 				case State::PREVIEW: {
 					mState = State::RECORD_INTER;
-					mSubmodeNext = TransitionSubmode::create(getRef<PerformActorMode>(), kStateTransitionLong, "Get ready to RECORD SHOT #" + std::to_string(mShotIndex + 1) + " in $");
+					std::string msg = "Get ready to record SHOT #" + std::to_string(mShotIndex + 1) + "/" + std::to_string(mController->getEditDecisions().size()) + " in $ seconds";
+					mSubmodeNext = TransitionSubmode::create(getRef<PerformActorMode>(), kStateTransitionLong, msg);
 					break;
 				}
 				case State::RECORD_INTER: {
@@ -1332,7 +1339,8 @@ namespace itp { namespace multitrack {
 					// Begin next shot:
 					if (mShotIndex < mController->getEditDecisions().size()) {
 						mState = State::PREVIEW_INTER;
-						mSubmodeNext = TransitionSubmode::create(getRef<PerformActorMode>(), kStateTransitionLong, "Get ready to PREVIEW SHOT #" + std::to_string(mShotIndex + 1) + " in $");
+						std::string msg = "Get ready to preview SHOT #" + std::to_string(mShotIndex + 1) + "/" + std::to_string(mController->getEditDecisions().size()) + " in $ seconds";
+						mSubmodeNext = TransitionSubmode::create(getRef<PerformActorMode>(), kStateTransitionLong, msg);
 					}
 					// Complete process:
 					else {
@@ -1587,7 +1595,7 @@ namespace itp { namespace multitrack {
 			else {
 				switch (mSubmode) {
 					case Submode::WAIT_FOR_NEW_MARKER: {
-						mLabel = std::to_string(mController->getTimer()->getPlayhead());
+						mLabel = "Time: " + decimalToString(mController->getTimer()->getPlayhead());
 						// Analyze gesture:
 						std::string recognizedGesture;
 						if (mController->analyzeGesture(&recognizedGesture)) {
@@ -1647,7 +1655,7 @@ namespace itp { namespace multitrack {
 						break;
 					}
 					default: {
-						mLabel = std::to_string(mController->getTimer()->getPlayhead());
+						mLabel = "Time: " + decimalToString(mController->getTimer()->getPlayhead());
 						break;
 					}
 				}
