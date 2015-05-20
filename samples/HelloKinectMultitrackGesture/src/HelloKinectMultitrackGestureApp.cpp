@@ -1157,6 +1157,15 @@ namespace itp { namespace multitrack {
 			{
 				// Sort info:
 				sort();
+				// Note: The following procedure assumes safety check was performed elsewhere...
+				// Remove the throw-away:
+				mInfoDeque.pop_back();
+				// Get a copy of the back item:
+				ItemInfo backCopy = mInfoDeque.back();
+				// Set copy's time stamp to end of sequence:
+				backCopy.mTime = kSceneDurationSec;
+				// Insert the rigged copy:
+				mInfoDeque.push_back(backCopy);
 				// Get paths:
 				ci::fs::path rootDir = getHomeDirectory() / "Desktop" / "Tests";
 				ci::fs::path currDir = rootDir / uid;
@@ -1215,7 +1224,7 @@ namespace itp { namespace multitrack {
 			// Initialize info manager:
 			mInfoManager = InfoManager();
 			// Force throw-away final frame:
-			mInfoManager.addItem(ItemInfo(kSceneDurationSec, 0, mBackgroundImages[0]));
+			mInfoManager.addItem(ItemInfo(kSceneDurationSec + 1.0f, 0, mBackgroundImages[0]));
 			// Remove previous cinematographer:
 			mController->removeTrackCinematographer();
 			// Goto start of sequence:
@@ -1369,6 +1378,15 @@ namespace itp { namespace multitrack {
 
 		void complete()
 		{
+			// Escape if we don't have the throw-away and at least one other frame:
+			if (mInfoManager.getFrameCount() < 2) {
+				mController->setMode(TransitionCardMode::create(
+					mController,
+					kStateTransitionLong,
+					"Not in the mood for cinematography?",
+					"HomeMode"));
+				return;
+			}
 			// Save track:
 			mInfoManager.save("track_bg", mController->getBackgroundPaths());
 			// Add group to sequence:
