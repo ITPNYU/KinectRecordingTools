@@ -11,8 +11,11 @@ namespace itp { namespace multitrack {
 		typedef std::shared_ptr<Mediator> Ref;
 
 	protected:
+
+		bool mActive; //!< flags whether mediator is active
+
 		/** @brief default constructor */
-		Mediator() { /* no-op */ }
+		Mediator(bool active) : mActive(active) { /* no-op */ }
 
 	public:
 
@@ -32,6 +35,18 @@ namespace itp { namespace multitrack {
 		template <typename T> std::shared_ptr<T> getRef()
 		{
 			return std::dynamic_pointer_cast<T>(shared_from_this());
+		}
+
+		/** @brief returns mediator's active flag */
+		const bool& isActive() const
+		{
+			return mActive;
+		}
+
+		/** @brief sets mediator's active flag */
+		void setActiveFlag(bool active)
+		{
+			mActive = active;
 		}
 
 		/** @brief pure virtual update method */

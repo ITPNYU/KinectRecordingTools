@@ -152,6 +152,59 @@ namespace itp { namespace multitrack {
 		virtual void onEvent(const std::string& str) { /* no-op */ }
 	};
 
+
+
+	/** @brief abstract base class for submode types */
+	template <typename ParentType>
+	class Submode : public std::enable_shared_from_this< Submode<ParentType> > {
+	public:
+
+		typedef std::shared_ptr<Submode>			Ref;
+		typedef std::shared_ptr<const Submode>		ConstRef;
+
+	protected:
+
+		ParentType	mParent; // internal reference to parent
+
+		/** @brief default constructor */
+		Submode(const ParentType& parent) : mParent(parent)	{ /* no-op */ }
+
+	public:
+
+		/** @brief virtual destructor */
+		virtual ~Submode() { /* no-op */ }
+
+		/** @brief returns const shared_ptr to mode */
+		typename Submode::ConstRef getRef() const
+		{
+			return shared_from_this();
+		}
+
+		/** @brief returns shared_ptr to mode */
+		typename Submode::Ref getRef()
+		{
+			return shared_from_this();
+		}
+
+		/** @brief returns parent */
+		ParentType getParent() const
+		{
+			return mParent;
+		}
+
+		/** @brief pure virtual launch method */
+		virtual void launch() = 0;
+
+		/** @brief pure virtual update method */
+		virtual void update() = 0;
+
+		/** @brief pure virtual draw method */
+		virtual void draw() = 0;
+
+		/** @brief overloadable event method */
+		virtual void onEvent(const std::string& str) { /* no-op */ }
+	};
+
 	/** @brief controller */
 	class Controller : public std::enable_shared_from_this<Controller> {
 	public:
@@ -197,11 +250,12 @@ namespace itp { namespace multitrack {
 		ci::fs::path								mDirectory;
 
 		Track::Group::RefDeque						mSequence;
+		std::deque< std::pair<double, double> >		mEditDecisions;
 
 		Mode::Ref									mModeCurr;
 		Mode::Ref									mModeNext;
 
-		ci::audio::VoiceRef							mSoundtrack;
+		ci::audio::VoiceSamplePlayerNodeRef			mSoundtrack;
 
 		/** @brief default constructor */
 		Controller() { /* no-op */ }
@@ -376,6 +430,16 @@ namespace itp { namespace multitrack {
 
 		void setMode(const std::string& name);
 
+		const std::deque< std::pair<double, double> >& getEditDecisions() const
+		{
+			return mEditDecisions;
+		}
+
+		void setEditDecisions(const std::deque< std::pair<double, double> >& decisions)
+		{
+			mEditDecisions = decisions;
+		}
+
 		/** @brief update method */
 		void update()
 		{
@@ -449,6 +513,16 @@ namespace itp { namespace multitrack {
 			}
 		}
 
+		/** @brief start soundtrack at time method */
+		void startSoundtrackAt(double playhead)
+		{
+			if (mSoundtrack) {
+				mSoundtrack->stop();
+				mSoundtrack->getSamplePlayerNode()->seekToTime(playhead);
+				mSoundtrack->start();
+			}
+		}
+
 		/** @brief pause soundtrack method */
 		void pauseSoundtrack()
 		{
@@ -470,6 +544,13 @@ namespace itp { namespace multitrack {
 		{
 			if (handleSoundtrack) startSoundtrack();
 			mTimer->start();
+		}
+
+		/** @brief start timer at time method */
+		void startTimerAt(double playhead, bool handleSoundtrack)
+		{
+			if (handleSoundtrack) startSoundtrackAt(playhead);
+			mTimer->startAt(playhead);
 		}
 
 		/** @brief pause timer method */
@@ -504,6 +585,9 @@ namespace itp { namespace multitrack {
 			mSequence.clear();
 			// Reset id counter:
 			mUidCounter = 0;
+			// Clear edit decisions and load default:
+			mEditDecisions.clear();
+			mEditDecisions.push_back(std::pair<double, double>(0.0, kSceneDurationSec));
 			// Pick new soundtrack randomly:
 			if (!mSoundtrackPaths.empty()) {
 				ci::fs::path currPath = mSoundtrackPaths[ci::randInt(0, mSoundtrackPaths.size())];
@@ -1011,51 +1095,274 @@ namespace itp { namespace multitrack {
 	class PerformActorMode : public Mode {
 	private:
 
-		Track::Group::Ref	mRecorder;
+		typedef std::shared_ptr<PerformActorMode>		Ref;
+		typedef std::shared_ptr<const PerformActorMode> ConstRef;
+
+		typedef Submode<PerformActorMode::Ref>			SubmodeT;
+		typedef std::shared_ptr<SubmodeT>				SubmodeRefT;
+		typedef std::shared_ptr<const SubmodeT>			SubmodeConstRefT;
+
+		class TransitionSubmode : public SubmodeT {
+		private:
+
+			double			mStart;
+			double			mDuration;
+			std::string		mMessage;
+
+			TransitionSubmode(const PerformActorMode::Ref& parent, double duration, const std::string& msg) :
+				SubmodeT(parent),
+				mStart(ci::app::getElapsedSeconds()),
+				mDuration(duration),
+				mMessage(msg)
+			{ /* no-op */ }
+
+		public:
+
+			template <typename ... Args> static SubmodeRefT create(Args&& ... args)
+			{
+				return SubmodeRefT(new TransitionSubmode(std::forward<Args>(args)...));
+			}
+
+			void launch()
+			{
+				mParent->mController->stopTimer();
+			}
+
+			void update()
+			{
+				double timeElap = ci::app::getElapsedSeconds() - mStart;
+				if (timeElap >= mDuration) {
+					mParent->gotoNextSubmode();
+				}
+				else {
+					mParent->mLabel = findAndReplace(mMessage, "$", std::to_string(static_cast<int>(mDuration - timeElap + 1)));
+				}
+			}
+
+			void draw()
+			{
+				ci::gl::drawStringCentered(mParent->mLabel, vec2(getWindowWidth() * 0.5f, getWindowHeight() * 0.5f), Color(1, 1, 1), mParent->mFont);
+			}
+		};
+
+		class PreviewSubmode : public SubmodeT {
+		private:
+
+			size_t						mIndex;
+			std::pair<double, double>	mRange;
+
+			PreviewSubmode(const PerformActorMode::Ref& parent, size_t index, const std::pair<double, double>& range) :
+				SubmodeT(parent),
+				mIndex(index),
+				mRange(range)
+			{ /* no-op */ }
+
+		public:
+
+			template <typename ... Args> static SubmodeRefT create(Args&& ... args)
+			{
+				return SubmodeRefT(new PreviewSubmode(std::forward<Args>(args)...));
+			}
+
+			void launch()
+			{
+				mParent->mController->startTimerAt(mRange.first, true);
+			}
+
+			void update()
+			{
+				// Update sequence:
+				mParent->mController->updateSequence();
+				// Get playhead:
+				const double& playhead = mParent->mController->getTimer()->getPlayhead();
+				// Goto next, if applicable:
+				if (playhead >= mRange.second - 0.3) {
+					mParent->gotoNextSubmode();
+				} 
+				else {
+					mParent->mLabel =
+						"Preview track #"
+						+ std::to_string(mIndex + 1)
+						+ " time: "
+						+ std::to_string(playhead)
+						+ " in: "
+						+ std::to_string(mRange.first)
+						+ " to "
+						+ std::to_string(mRange.second)
+						;
+				}
+			}
+
+			void draw()
+			{
+				gl::color(1, 1, 1, 1);
+				mParent->mController->drawSequence();
+				ci::gl::drawStringCentered(mParent->mLabel, vec2(getWindowWidth() * 0.5f, getWindowHeight() - 100.0f), Color(1, 1, 1), mParent->mFont);
+			}
+		};
+
+		class RecordSubmode : public SubmodeT {
+		private:
+
+			size_t						mIndex;
+			std::pair<double, double>	mRange;
+
+			RecordSubmode(const PerformActorMode::Ref& parent, size_t index, const std::pair<double, double>& range) :
+				SubmodeT(parent),
+				mIndex(index),
+				mRange(range)
+			{ /* no-op */ }
+
+		public:
+
+			template <typename ... Args> static SubmodeRefT create(Args&& ... args)
+			{
+				return SubmodeRefT(new RecordSubmode(std::forward<Args>(args)...));
+			}
+
+			void launch()
+			{
+				mParent->mController->startTimerAt(mRange.first, true);
+			}
+
+			void update()
+			{
+				// Update sequence:
+				mParent->mController->updateSequence();
+				// Update recorder:
+				mParent->mRecorder->update();
+				// Get playhead:
+				const double& playhead = mParent->mController->getTimer()->getPlayhead();
+				// Goto next, if applicable:
+				if (playhead >= mRange.second - 0.3) {
+					mParent->gotoNextSubmode();
+				}
+				else {
+					mParent->mLabel =
+						"Record track #"
+						+ std::to_string(mIndex + 1)
+						+ " time: "
+						+ std::to_string(playhead)
+						+ " in: "
+						+ std::to_string(mRange.first)
+						+ " to "
+						+ std::to_string(mRange.second)
+						;
+				}
+			}
+
+			void draw()
+			{
+				gl::color(1, 1, 1, 1);
+				mParent->mController->drawSequence();
+				gl::color(0, 0, 0, 0.5);
+				gl::drawSolidRect(getWindowBounds());
+				gl::color(1, 1, 1, 1);
+				mParent->mRecorder->draw();
+				ci::gl::drawStringCentered(mParent->mLabel, vec2(getWindowWidth() * 0.5f, getWindowHeight() - 100.0f), Color(1, 1, 1), mParent->mFont);
+			}
+		};
+
+		enum State
+		{
+			NONE,
+			PREVIEW_INTER,
+			PREVIEW,
+			RECORD_INTER,
+			RECORD
+		};
+
+		Track::Group::Ref			mRecorder;
+		size_t						mShotIndex;
+		State						mState;
+
+		SubmodeRefT					mSubmodeCurr;
+		SubmodeRefT					mSubmodeNext;
 
 		PerformActorMode(const Controller::Ref& controller) :
-			Mode(controller, ci::Font("Helvetica", 40), ""),
-			mRecorder(mController->createTrackSilhouette("track_" + std::to_string(mController->getNextUid()),true))
+			Mode(controller, ci::Font("Helvetica", 60), ""),
+			mRecorder(mController->createTrackSilhouette("track_" + std::to_string(mController->getNextUid()),true)),
+			mShotIndex(0)
 		{ 
-			mController->startTimer(true);
+			mController->stopTimer();
+		}
+
+		void initialize()
+		{
+			// Goto first preview intertitle:
+			mState = State::PREVIEW_INTER;
+			mSubmodeNext = TransitionSubmode::create(getRef<PerformActorMode>(), kStateTransitionLong, "Get ready to PREVIEW SHOT #" + std::to_string(mShotIndex + 1) + " in $");
 		}
 
 	public:
 
 		static Mode::Ref create(const Controller::Ref& controller)
 		{
-			return Mode::Ref(new PerformActorMode(controller));
+			PerformActorMode::Ref t = PerformActorMode::Ref(new PerformActorMode(controller));
+			t->initialize();
+			return t;
+		}
+
+		void gotoNextSubmode()
+		{
+			// Stop timer:
+			mController->stopTimer();
+			// Reset current submode:
+			mSubmodeCurr.reset();
+			// Choose next state:
+			switch (mState) {
+				case State::PREVIEW_INTER: {
+					mState = State::PREVIEW;
+					mSubmodeNext = PreviewSubmode::create(getRef<PerformActorMode>(), mShotIndex, mController->getEditDecisions()[mShotIndex]);
+					break;
+				}
+				case State::PREVIEW: {
+					mState = State::RECORD_INTER;
+					mSubmodeNext = TransitionSubmode::create(getRef<PerformActorMode>(), kStateTransitionLong, "Get ready to RECORD SHOT #" + std::to_string(mShotIndex + 1) + " in $");
+					break;
+				}
+				case State::RECORD_INTER: {
+					mState = State::RECORD;
+					mSubmodeNext = RecordSubmode::create(getRef<PerformActorMode>(), mShotIndex, mController->getEditDecisions()[mShotIndex]);
+					break;
+				}
+				case State::RECORD: {
+					// Goto next shot index:
+					mShotIndex++;
+					// Begin next shot:
+					if (mShotIndex < mController->getEditDecisions().size()) {
+						mState = State::PREVIEW_INTER;
+						mSubmodeNext = TransitionSubmode::create(getRef<PerformActorMode>(), kStateTransitionLong, "Get ready to PREVIEW SHOT #" + std::to_string(mShotIndex + 1) + " in $");
+					}
+					// Complete process:
+					else {
+						mSubmodeNext.reset();
+						mSubmodeCurr.reset();
+						mState = State::NONE;
+						complete();
+					}
+					break;
+				}
+				default: { break; }
+			}
 		}
 
 		void update()
 		{
-			mController->updateSequence();
-			mRecorder->update();
-			// Analyze gesture:
-			std::string recognizedGesture;
-			if (mController->analyzeGesture(&recognizedGesture)) {
-				// Check for control gesture:
-				if (recognizedGesture == "CONTROL") {
-					complete();
-				}
+			// Goto next submode, if applicable:
+			if (mSubmodeNext) {
+				mSubmodeCurr = mSubmodeNext;
+				mSubmodeCurr->launch();
+				mSubmodeNext.reset();
 			}
-			else {
-				mLabel = std::to_string(mController->getTimer()->getPlayhead());
-			}
+			// Update submode:
+			if (mSubmodeCurr) mSubmodeCurr->update();
 		}
 
 		void draw()
 		{
-			mController->drawSequence();
-			mRecorder->draw();
-			ci::gl::drawStringCentered(mLabel, vec2(getWindowWidth() * 0.5f, getWindowHeight() - 100.0f), Color(1, 1, 1), mFont);
-		}
-
-		void onEvent(const std::string& str) 
-		{ 
-			if ("LOOP" == str) {
-				complete();
-			}
+			// Draw submode:
+			if (mSubmodeCurr) mSubmodeCurr->draw();
 		}
 
 		void complete()
@@ -1198,6 +1505,20 @@ namespace itp { namespace multitrack {
 				else {
 					throw std::runtime_error("Application could not open file: \'" + infoPth.string() + "\'");
 				}
+			}
+
+			std::deque< std::pair<double, double> > convertToEditDecisions() const
+			{
+				std::deque< std::pair<double, double> > output;
+				ItemInfo::Deque::const_iterator iter = mInfoDeque.cbegin();
+				while (iter != mInfoDeque.cend()) {
+					double currBegin = iter->mTime;
+					if (++iter != mInfoDeque.cend()) {
+						double currEnd = iter->mTime;
+						output.push_back(std::pair<double, double>(currBegin, currEnd));
+					}
+				}
+				return output;
 			}
 		};
 
@@ -1398,6 +1719,8 @@ namespace itp { namespace multitrack {
 			}
 			// Save track:
 			mInfoManager.save("track_bg", mController->getBackgroundPaths());
+			// Save edit decisions:
+			mController->setEditDecisions(mInfoManager.convertToEditDecisions());
 			// Add group to sequence:
 			mController->addTrackGroup(mController->createTrackCinematographer(mInfoManager.getFrameCount()), false);
 			// Return home:

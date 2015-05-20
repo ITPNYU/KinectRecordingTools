@@ -89,6 +89,14 @@ namespace itp { namespace multitrack {
 				}
 				return count;
 			}
+
+			/** @brief mediator active-flag setter method */
+			void setActiveFlag(bool active)
+			{
+				for (auto& tTrack : mTracks) {
+					tTrack->setActiveFlag(active);
+				}
+			}
 		};
 
 	protected:
@@ -132,6 +140,9 @@ namespace itp { namespace multitrack {
 
 		/** @brief pure virtual frame-count getter method */
 		virtual size_t getFrameCount() const = 0;
+
+		/** @brief pure virtual mediator active-flag setter method */
+		virtual void setActiveFlag(bool active) = 0;
 	};
 
 	/** @brief templated track type */
@@ -166,6 +177,7 @@ namespace itp { namespace multitrack {
 			
 			/** @brief basic constructor */
 			Player(typename TrackT::Ref track, PlayerCallback playerCb) :
+				Mediator(true),
 				mTrack(track),
 				mPlayerCb(playerCb),
 				mInfoVec( FrameInfoVec() ),
@@ -245,14 +257,13 @@ namespace itp { namespace multitrack {
 			RecorderCallback		mRecorderCb;	//!< recorder callback function
 			PlayerCallback			mPlayerCb;		//!< player callback function
 
-			bool					mActive;		//!< flags whether recorder is active
 			std::ofstream			mInfoFile;		//!< info-file output stream
 
 			Recorder(typename TrackT::Ref track, RecorderCallback recorderCb, PlayerCallback playerCb, bool active) :
+				Mediator(active),
 				mTrack(track),
 				mRecorderCb(recorderCb),
-				mPlayerCb(playerCb),
-				mActive(active)
+				mPlayerCb(playerCb)
 			{ 
 				// Start active recorder, if applicable:
 				if (mActive) {
@@ -381,6 +392,12 @@ namespace itp { namespace multitrack {
 		size_t getFrameCount() const
 		{
 			return mFrameCount;
+		}
+
+		/** @brief mediator active-flag setter method */
+		void setActiveFlag(bool active)
+		{
+			if (mMediator) mMediator->setActiveFlag(active);
 		}
 	};
 
