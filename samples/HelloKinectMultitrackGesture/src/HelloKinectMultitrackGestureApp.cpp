@@ -40,7 +40,7 @@ static const double kShotDurationMax  = 8.0;
 
 static const double kStateTransitionShort = 2.0f;
 static const double kStateTransitionMedium = 4.0f;
-static const double kStateTransitionLong = 6.0f;
+static const double kStateTransitionLong = 5.0f;
 
 namespace itp { namespace multitrack {
 
@@ -780,7 +780,7 @@ namespace itp { namespace multitrack {
 		std::string		mTargetMode;
 
 		TransitionCardMode(const Controller::Ref& controller, double duration, const std::string& msg, const std::string& targetMode) :
-			Mode(controller, ci::Font("Helvetica", 60), ""),
+			Mode(controller, ci::Font("Helvetica", 80), ""),
 			mStart(ci::app::getElapsedSeconds()),
 			mDuration(duration),
 			mMessage(msg),
@@ -803,7 +803,7 @@ namespace itp { namespace multitrack {
 				mController->setMode(mTargetMode);
 			}
 			else {
-				mLabel = findAndReplace(mMessage, "$", std::to_string(static_cast<int>(mDuration - timeElap)));
+				mLabel = findAndReplace(mMessage, "$", std::to_string(static_cast<int>(mDuration - timeElap + 1)));
 			}
 		}
 
@@ -853,7 +853,7 @@ namespace itp { namespace multitrack {
 				mController->setMode("WaitForUserMode");
 			}
 			else {
-				mLabel = "Establishing " + mName + " pose in " + std::to_string(static_cast<int>(duration - timeElap));
+				mLabel = "Establishing " + mName + " pose in " + std::to_string(static_cast<int>(duration - timeElap + 1));
 			}
 		}
 
