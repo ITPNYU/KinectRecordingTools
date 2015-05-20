@@ -24,6 +24,8 @@ using namespace std;
 static const size_t kRawFrameWidth = 960;
 static const size_t kRawFrameHeight = 540;
 
+static const double kCaptionHeight = 325.0;
+
 static const size_t kBodyPointCount = 25;
 
 static const double kRecognitionThreshold  = 0.85;
@@ -32,7 +34,7 @@ static const size_t kRecognitionSamplesMin = 25;
 
 static const size_t kSelectItemFramesMin = 100;
 
-static const double kSceneDurationSec = 60.0;
+static const double kSceneDurationSec = 30.0;
 static const double kShotDurationMin  = 3.0;
 static const double kShotDurationMax  = 8.0;
 
@@ -42,14 +44,6 @@ static const double kStateTransitionLong = 6.0f;
 
 namespace itp { namespace multitrack {
 
-	static inline std::string findAndReplace(const std::string& str, const std::string& toRemove, const std::string& toInsert)
-	{
-		std::string s = str;
-		size_t pos = s.find(toRemove);
-		if (pos == std::string::npos) return s;
-		return s.replace(pos, toRemove.length(), toInsert);
-	}
-
 	struct CaptionImage
 	{
 		typedef std::deque<CaptionImage> Deque;
@@ -57,6 +51,44 @@ namespace itp { namespace multitrack {
 		ci::gl::TextureRef	mTex;
 		std::string			mMsg;
 	};
+
+	static inline void drawCaptions(const CaptionImage::Deque& captions, const ci::Font& font, float itemHeight)
+	{
+		if (captions.empty()) return;
+		// Get caption count:
+		size_t captionCount = captions.size();
+		// Compute padding:
+		float padding = (getWindowHeight() - itemHeight * captionCount) / (captionCount + 1.0f);
+		// Compute item dimensions:
+		ci::vec2 dim;
+		dim.y = itemHeight;
+		dim.x = dim.y * (static_cast<float>(kRawFrameWidth) / static_cast<float>(kRawFrameHeight));
+		// Draw captions:
+		vec2 offset(0.0, padding);
+		for (const auto& caption : captions) {
+			gl::pushMatrices();
+			gl::translate(offset);
+
+			Rectf rect = Rectf(vec2(0.0, 0.0), dim);
+			gl::color(0.0, 0.0, 0.0, 0.75);
+			gl::drawSolidRect(rect);
+			gl::color(1.0, 1.0, 1.0, 1.0);
+			gl::draw(caption.mTex, rect);
+			gl::drawStrokedRect(rect);
+			gl::drawStringCentered(caption.mMsg, vec2((rect.x1 + rect.x2) * 0.5, rect.y2 - 50.0), Color(1, 1, 1), font);
+
+			gl::popMatrices();
+			offset.y += dim.y + padding;
+		}
+	}
+
+	static inline std::string findAndReplace(const std::string& str, const std::string& toRemove, const std::string& toInsert)
+	{
+		std::string s = str;
+		size_t pos = s.find(toRemove);
+		if (pos == std::string::npos) return s;
+		return s.replace(pos, toRemove.length(), toInsert);
+	}
 
 	/** @brief abstract base class for mode types */
 	class Mode : public std::enable_shared_from_this<Mode> {
@@ -882,39 +914,6 @@ namespace itp { namespace multitrack {
 			mController->startTimer(false);
 		}
 
-		void drawCaptions()
-		{
-			if (mCaptions.empty()) return;
-			// Set padding (TODO externalize?):
-			float padding = 25.0;
-			// Get caption count:
-			size_t captionCount = mCaptions.size();
-			// Compute item dimensions:
-			ci::vec2 dim;
-			dim.y = (getWindowHeight() - (padding * (captionCount + 1.0f))) / static_cast<float>(captionCount);
-			dim.x = dim.y * (static_cast<float>(kRawFrameWidth) / static_cast<float>(kRawFrameHeight));
-
-			vec2 offset(0.0, padding);
-			for (const auto& caption : mCaptions) {
-				gl::pushMatrices();
-				gl::translate(offset);
-
-				Rectf rect = Rectf(vec2(0.0, 0.0), dim);
-				gl::color(0.0, 0.0, 0.0, 0.75);
-				gl::drawSolidRect(rect);
-				gl::color(1.0, 1.0, 1.0, 1.0);
-				gl::draw(caption.mTex, rect);
-				gl::drawStrokedRect(rect);
-
-				gl::drawStringCentered(caption.mMsg, vec2((rect.x1 + rect.x2) * 0.5, rect.y2 - 50.0), Color(1, 1, 1), mFont);
-
-				//gl::drawString(caption.mMsg, vec2(dim.x + 20.0, dim.y * 0.5), Color(1, 1, 1), mFont);
-
-				gl::popMatrices();
-				offset.y += dim.y + padding;
-			}
-		}
-
 	public:
 
 		static Mode::Ref create(const Controller::Ref& controller)
@@ -998,7 +997,7 @@ namespace itp { namespace multitrack {
 			mController->drawSequence();
 			mPreview->draw();
 			ci::gl::drawStringCentered(mLabel, vec2(getWindowWidth() * 0.5f, getWindowHeight() - 100.0f), Color(1, 1, 1), mFont);
-			if (!mCaptions.empty() && mController->getActiveBodyCount() == 1) drawCaptions();
+			if (!mCaptions.empty() && mController->getActiveBodyCount() == 1) drawCaptions(mCaptions, mFont, kCaptionHeight);
 		}
 
 		void onEvent(const std::string& str)
@@ -1203,6 +1202,7 @@ namespace itp { namespace multitrack {
 		};
 
 		Track::Group::Ref					mPreview;
+		CaptionImage::Deque					mCaptions;
 		Submode								mSubmode;
 		std::vector<ci::gl::TextureRef>		mBackgroundImages;
 
@@ -1221,6 +1221,11 @@ namespace itp { namespace multitrack {
 			for (const auto& imagePath : imagePaths) {
 				mBackgroundImages.push_back(ci::gl::Texture::create(ci::Surface(loadImage(imagePath))));
 			}
+			// Set captions:
+			mCaptions = {
+				{ mController->getPoseArchetype("CONTROL"), "GO HOME" },
+				{ mController->getPoseArchetype("CINEMATOGRAPHER"), "ADD SHOT" }
+			};
 			// Initialize info manager:
 			mInfoManager = InfoManager();
 			// Force throw-away final frame:
@@ -1261,7 +1266,7 @@ namespace itp { namespace multitrack {
 			else {
 				switch (mSubmode) {
 					case Submode::WAIT_FOR_NEW_MARKER: {
-						mLabel = "Perform CINEMATOGRAPHER pose to add shot at " + std::to_string(mController->getTimer()->getPlayhead());
+						mLabel = std::to_string(mController->getTimer()->getPlayhead());
 						// Analyze gesture:
 						std::string recognizedGesture;
 						if (mController->analyzeGesture(&recognizedGesture)) {
@@ -1335,6 +1340,10 @@ namespace itp { namespace multitrack {
 			mPreview->draw();
 			ci::gl::drawStringCentered(mLabel, vec2(getWindowWidth() * 0.5f, getWindowHeight() - 100.0f), Color(1, 1, 1), mFont);
 			switch (mSubmode) {
+				case Submode::WAIT_FOR_NEW_MARKER: {
+					if (!mCaptions.empty()) drawCaptions(mCaptions, mFont, kCaptionHeight);
+					break;
+				}
 				case Submode::CHOOSE_IMAGE: {
 					float itemX = 0.0f;
 					size_t imgCount = mBackgroundImages.size();
